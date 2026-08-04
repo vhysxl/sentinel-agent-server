@@ -52,14 +52,42 @@ async def run_analysis(request: AnalyzeRequest):
                     FROM transactions
                     WHERE type = 'expense'
                     GROUP BY vendor_id
+                ),
+                financial_candidates AS (
+                    SELECT t.id
+                    FROM transactions t
+                    JOIN stats s ON t.vendor_id = s.vendor_id
+                    WHERE t.type = 'expense' 
+                      AND t.transaction_date >= :start_date 
+                      AND t.transaction_date <= :end_date
+                      AND (t.amount - s.mean) / s.std > 3
+                ),
+                fraud_candidates AS (
+                    -- Duplicate transactions / Split payments on the same day
+                    SELECT t1.id
+                    FROM transactions t1
+                    JOIN transactions t2 ON t1.vendor_id = t2.vendor_id 
+                        AND t1.amount = t2.amount 
+                        AND t1.id != t2.id
+                        AND CAST(t1.transaction_date AS DATE) = CAST(t2.transaction_date AS DATE)
+                    WHERE t1.type = 'expense'
+                      AND t1.transaction_date >= :start_date 
+                      AND t1.transaction_date <= :end_date
+                      
+                    UNION
+                    
+                    -- Suspicious / Flagged Vendors
+                    SELECT t.id
+                    FROM transactions t
+                    JOIN vendors v ON t.vendor_id = v.id
+                    WHERE t.type = 'expense'
+                      AND t.transaction_date >= :start_date 
+                      AND t.transaction_date <= :end_date
+                      AND v.status IN ('flagged', 'suspended', 'high_risk')
                 )
-                SELECT t.id
-                FROM transactions t
-                JOIN stats s ON t.vendor_id = s.vendor_id
-                WHERE t.type = 'expense' 
-                  AND t.transaction_date >= :start_date 
-                  AND t.transaction_date <= :end_date
-                  AND (t.amount - s.mean) / s.std > 3
+                SELECT id FROM financial_candidates
+                UNION
+                SELECT id FROM fraud_candidates
             """)
             
             result = db.execute(sql, {"start_date": request.start_date, "end_date": request.end_date}).fetchall()
