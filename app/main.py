@@ -4,6 +4,7 @@ from typing import List
 from sqlalchemy import text
 from app.db.session import SessionLocal
 from app.agents.agent1 import run_financial_investigator
+from app.engine.scoring import calculate_base_score
 import json
 
 app = FastAPI(
@@ -72,6 +73,11 @@ def run_analysis(request: AnalyzeRequest):
                     content = content.split("```")[1].split("```")[0].strip()
                     
                 finding_json = json.loads(content)
+                
+                # 3. Python Scoring Engine
+                scoring_result = calculate_base_score(finding_json)
+                finding_json["scoring"] = scoring_result
+                
                 findings.append(finding_json)
                 
             except Exception as e:
