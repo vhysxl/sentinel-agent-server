@@ -7,6 +7,7 @@ from sqlalchemy import text
 from app.db.session import SessionLocal
 from app.agents.agent1 import run_financial_investigator
 from app.agents.agent2 import run_fraud_investigator
+from app.agents.agent3 import run_evidence_reviewer
 from app.engine.scoring import calculate_base_score
 import json
 import concurrent.futures
@@ -113,7 +114,56 @@ async def run_analysis(request: AnalyzeRequest):
                     
                     # 3. Python Scoring Engine
                     scoring_result = calculate_base_score(merged_finding)
-                    merged_finding["scoring"] = scoring_result
+                    
+                    yield f"data: {json.dumps({'status': 'progress', 'node': 'agent_3', 'message': f'Running Agent 3 for Evidence Review on Transaction ID {tid}...'})}\\n\\n"
+                    
+                    # 4. Agent 3: Evidence Review & Decision
+                    response_a3 = run_evidence_reviewer(tid, json_a1, json_a2, scoring_result)
+                    content_a3 = response_a3.choices[0].message.content
+                    
+                    if "```json" in content_a3:
+                        content_a3 = content_a3.split("```json")[1].split("```")[0].strip()
+                    elif "```" in content_a3:
+                        content_a3 = content_a3.split("```")[1].split("```")[0].strip()
+                    json_a3 = json.loads(content_a3)
+                    
+                    # Merge Agent 3 findings
+                    merged_finding["finding"] += f"\\n\\n🔹 Agent 3 (Evidence Review):\\n{json_a3.get('finding', '')}"
+                    merged_finding["provenance"]["tools_used"] = list(set(merged_finding["provenance"].get("tools_used", []) + json_a3.get("provenance", {}).get("tools_used", [])))
+                    
+                    semantic_evidence = json_a3.get("evidence", {}).get("semantic", [])
+                    merged_finding["evidence"]["semantic"] = semantic_evidence
+                    
+                    a3_scoring = json_a3.get("scoring", {})
+                    semantic_adj = a3_scoring.get("llm_semantic_adjustment", 0)
+                    adj_reason = a3_scoring.get("adjustment_reason", "")
+                    
+                    final_score = scoring_result.get("base_risk_score", 0) + semantic_adj
+                    # bound final_score between 0 and 100
+                    final_score = max(0, min(100, final_score))
+                    
+                    if final_score < 40:
+                        risk_level = "Low Risk"
+                        recommendation = "Transaksi wajar. Otomatis disetujui (No Action)."
+                    elif final_score < 60:
+                        risk_level = "Medium Risk"
+                        recommendation = "Anomali ringan. Dicatat ke dalam audit report bulanan."
+                    elif final_score < 80:
+                        risk_level = "High Risk"
+                        recommendation = "Indikasi kecurangan. Butuh verifikasi manual (Manual Review)."
+                    else:
+                        risk_level = "Critical Risk"
+                        recommendation = "Indikasi fraud fatal. Eskalasi darurat ke Manajer/CFO."
+                    
+                    merged_finding["scoring"] = {
+                        "base_risk_score": scoring_result.get("base_risk_score", 0),
+                        "objective_triggers": scoring_result.get("objective_triggers", []),
+                        "llm_semantic_adjustment": semantic_adj,
+                        "adjustment_reason": adj_reason,
+                        "final_risk_score": final_score,
+                        "risk_level": risk_level,
+                        "recommendation": recommendation
+                    }
                     
                     findings.append(merged_finding)
                     
