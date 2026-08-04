@@ -115,7 +115,7 @@ async def run_analysis(request: AnalyzeRequest):
                     # 3. Python Scoring Engine
                     scoring_result = calculate_base_score(merged_finding)
                     
-                    yield f"data: {json.dumps({'status': 'progress', 'node': 'agent_3', 'message': f'Running Agent 3 for Evidence Review on Transaction ID {tid}...'})}\\n\\n"
+                    yield f"data: {json.dumps({'status': 'progress', 'node': 'agent_3', 'message': f'Running Agent 3 for Evidence Review on Transaction ID {tid}...'})}\n\n"
                     
                     # 4. Agent 3: Evidence Review & Decision
                     response_a3 = run_evidence_reviewer(tid, json_a1, json_a2, scoring_result)
@@ -128,7 +128,7 @@ async def run_analysis(request: AnalyzeRequest):
                     json_a3 = json.loads(content_a3)
                     
                     # Merge Agent 3 findings
-                    merged_finding["finding"] += f"\\n\\n🔹 Agent 3 (Evidence Review):\\n{json_a3.get('finding', '')}"
+                    merged_finding["finding"] += f"\n\n🔹 Agent 3 (Evidence Review):\n{json_a3.get('finding', '')}"
                     merged_finding["provenance"]["tools_used"] = list(set(merged_finding["provenance"].get("tools_used", []) + json_a3.get("provenance", {}).get("tools_used", [])))
                     
                     semantic_evidence = json_a3.get("evidence", {}).get("semantic", [])
