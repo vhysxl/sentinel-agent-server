@@ -15,8 +15,8 @@ def find_duplicate_expenses(amount: float, vendor_id: int, date: str) -> List[Di
             FROM transactions
             WHERE vendor_id = :vendor_id
               AND amount = :amount
-              AND transaction_date >= :date::timestamp - INTERVAL '24 hours'
-              AND transaction_date <= :date::timestamp + INTERVAL '24 hours'
+              AND transaction_date >= CAST(:date AS TIMESTAMP) - INTERVAL '24 hours'
+              AND transaction_date <= CAST(:date AS TIMESTAMP) + INTERVAL '24 hours'
             ORDER BY transaction_date ASC
         """)
         rows = db.execute(sql, {"vendor_id": vendor_id, "amount": amount, "date": date}).fetchall()

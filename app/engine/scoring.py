@@ -61,7 +61,20 @@ def calculate_base_score(agent_finding: Dict[str, Any]) -> Dict[str, Any]:
     if base_score > 80:
         base_score = 80
         
+    final_risk_score = base_score # Can be modified later with semantic score
+    
+    if final_risk_score >= 70:
+        risk_level = "Critical"
+    elif final_risk_score >= 50:
+        risk_level = "High"
+    elif final_risk_score >= 30:
+        risk_level = "Medium"
+    else:
+        risk_level = "Low"
+        
     return {
         "base_risk_score": base_score,
+        "final_risk_score": final_risk_score,
+        "risk_level": risk_level,
         "objective_triggers": objective_triggers
     }
