@@ -8,3 +8,5 @@ langchain-google-genai
 psycopg2-binary
 faker
 python-dotenv
+google-genai
+openai
