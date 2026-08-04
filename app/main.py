@@ -4,6 +4,7 @@ from typing import List
 from sqlalchemy import text
 from app.db.session import SessionLocal
 from app.agents.agent1 import run_financial_investigator
+from app.agents.agent2 import run_fraud_investigator
 from app.engine.scoring import calculate_base_score
 import json
 
@@ -60,25 +61,51 @@ def run_analysis(request: AnalyzeRequest):
             
         findings = []
         # 2. Agent Orchestration (Menjalankan LLM untuk setiap kandidat)
+        import concurrent.futures
         for tid in candidate_ids:
             try:
-                # LLM melakukan reasoning & tool calling
-                agent_response = run_financial_investigator(transaction_id=tid)
-                content = agent_response.choices[0].message.content
-                
-                # Ekstrak JSON dari string
-                if "```json" in content:
-                    content = content.split("```json")[1].split("```")[0].strip()
-                elif "```" in content:
-                    content = content.split("```")[1].split("```")[0].strip()
+                # LLM melakukan reasoning & tool calling secara paralel (Agent 1 & Agent 2)
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future_a1 = executor.submit(run_financial_investigator, transaction_id=tid)
+                    future_a2 = executor.submit(run_fraud_investigator, transaction_id=tid)
                     
-                finding_json = json.loads(content)
+                    response_a1 = future_a1.result()
+                    response_a2 = future_a2.result()
+                
+                content_a1 = response_a1.choices[0].message.content
+                content_a2 = response_a2.choices[0].message.content
+                
+                # Ekstrak JSON dari string Agent 1
+                if "```json" in content_a1:
+                    content_a1 = content_a1.split("```json")[1].split("```")[0].strip()
+                elif "```" in content_a1:
+                    content_a1 = content_a1.split("```")[1].split("```")[0].strip()
+                json_a1 = json.loads(content_a1)
+
+                # Ekstrak JSON dari string Agent 2
+                if "```json" in content_a2:
+                    content_a2 = content_a2.split("```json")[1].split("```")[0].strip()
+                elif "```" in content_a2:
+                    content_a2 = content_a2.split("```")[1].split("```")[0].strip()
+                json_a2 = json.loads(content_a2)
+                    
+                # Merge temuan dari Agent 1 dan Agent 2
+                merged_finding = {
+                    "finding": f"[Agent 1]: {json_a1.get('finding', '')} | [Agent 2]: {json_a2.get('finding', '')}",
+                    "provenance": {
+                        "generated_by": "Agent_1_and_Agent_2_Parallel",
+                        "tools_used": list(set(json_a1.get("provenance", {}).get("tools_used", []) + json_a2.get("provenance", {}).get("tools_used", [])))
+                    },
+                    "evidence": {
+                        "objective": json_a1.get("evidence", {}).get("objective", []) + json_a2.get("evidence", {}).get("objective", [])
+                    }
+                }
                 
                 # 3. Python Scoring Engine
-                scoring_result = calculate_base_score(finding_json)
-                finding_json["scoring"] = scoring_result
+                scoring_result = calculate_base_score(merged_finding)
+                merged_finding["scoring"] = scoring_result
                 
-                findings.append(finding_json)
+                findings.append(merged_finding)
                 
             except Exception as e:
                 # Jika LLM berhalusinasi atau gagal memformat JSON

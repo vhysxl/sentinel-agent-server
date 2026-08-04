@@ -35,3 +35,5 @@ class Transaction(Base):
 
     vendor = relationship("Vendor")
     user = relationship("User")
+
+
