@@ -18,16 +18,16 @@ from app.tools.financial import (
 
 def run_financial_investigator(transaction_id: int):
     """
-    Menjalankan Agent 1 (Financial Analytics Investigator) 
+    Menjalankan Agent 1 (Financial Analytics Investigator)
     untuk menginvestigasi transaksi menggunakan Gemini API secara Interaktif (Tool Calling).
     """
     load_dotenv(override=True)
     client = genai.Client(
         api_key=os.environ.get("GEMINI_API_KEY")
     )
-    
+
     print(f"\n[Agent 1] Memulai investigasi (Tool Calling Loop) untuk Transaction ID: {transaction_id}...")
-    
+
     # 1. BENTUK PROMPT SISTEM/USER
     prompt = f"""
 Kamu adalah Agent 1: Financial Analytics Investigator.
@@ -40,6 +40,7 @@ Gunakan tools yang tersedia untuk mengumpulkan fakta objektif tentang:
 4. Waktu transaksi (jam kerja/akhir pekan)
 
 Setelah kamu memiliki semua data objektif yang diperlukan, berikan laporan akhir HANYA DALAM FORMAT JSON yang valid tanpa markdown apapun.
+Gunakan nama metric yang stabil karena backend akan menghitung skor domain Agent 1 dari evidence ini.
 Format JSON yang DIBUTUHKAN:
 {{
   "finding": "Ringkasan komprehensif temuan dari multi-dimensi (timing, vendor, z-score).",
@@ -65,7 +66,7 @@ Ingat: kembalikan HANYA format JSON di output akhirmu!
         get_vendor_transaction_history,
         check_transaction_timing
     ]
-    
+
     config = types.GenerateContentConfig(
         tools=tools_list,
         temperature=0.2,
@@ -78,9 +79,10 @@ Ingat: kembalikan HANYA format JSON di output akhirmu!
     models_to_try = [
         'models/gemini-3.5-flash',
         'models/gemini-3.6-flash',
-        'models/gemini-3.5-flash-lite'
+        'models/gemini-3.5-flash-lite',
+        'models/gemini-3-flash-preview'
     ]
-    
+
     response = None
     for idx, model_name in enumerate(models_to_try):
         print(f"[Agent 1] Menganalisis dan memanggil tools secara otomatis ({model_name})...")
@@ -90,18 +92,19 @@ Ingat: kembalikan HANYA format JSON di output akhirmu!
             break  # Berhasil, keluar dari loop fallback
         except Exception as e:
             error_str = str(e)
+            print(f"[Agent 1] Error pada model {model_name}: {error_str}")
             is_overloaded = any(err in error_str for err in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"])
             if is_overloaded and idx < len(models_to_try) - 1:
-                print(f"[Agent 1] Model {model_name} overloaded/error. Fallback ke model berikutnya...")
+                print(f"[Agent 1] Fallback ke model berikutnya...")
                 continue
             # Jika error selain overload, atau sudah mentok di model terakhir
             raise e
-    
-    
+
+
     content = response.text
     print("\n[Agent 1] Selesai Investigasi. Laporan Akhir:")
     print(content)
-    
+
     # Mengembalikan custom object agar kompatibel dengan app/main.py
     class MockMessage:
         def __init__(self, c):

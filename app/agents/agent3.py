@@ -23,7 +23,7 @@ from app.tools.fraud import find_duplicate_expenses, get_vendor_history
 
 def run_evidence_reviewer(transaction_id: int, agent1_findings: dict, agent2_findings: dict, base_scoring: dict):
     """
-    Menjalankan Agent 3 (Evidence Review & Decision) 
+    Menjalankan Agent 3 (Evidence Review & Decision)
     Tugasnya crosscheck hasil Agent 1 dan 2, mencari counter-evidence,
     dan memberikan penilaian akhir (llm_semantic_adjustment).
     """
@@ -31,9 +31,9 @@ def run_evidence_reviewer(transaction_id: int, agent1_findings: dict, agent2_fin
     client = genai.Client(
         api_key=os.environ.get("GEMINI_API_KEY")
     )
-    
+
     print(f"\n[Agent 3] Memulai review evidence (Tool Calling Loop) untuk Transaction ID: {transaction_id}...")
-    
+
     # 1. BENTUK PROMPT SISTEM/USER
     prompt = f"""
 Kamu adalah Agent 3: Evidence Review & Decision.
@@ -45,13 +45,14 @@ Temuan Agent 1 (Finansial):
 Temuan Agent 2 (Fraud):
 {json.dumps(agent2_findings, indent=2)}
 
-Base Risk Score dari Scoring Engine:
+Skor objektif per-agent dan hasil agregasi dari Scoring Engine:
 {json.dumps(base_scoring, indent=2)}
 
 Langkah-langkah:
-1. Pahami temuan dari Agent 1 dan Agent 2.
-2. Gunakan tools yang tersedia (seperti `get_sales_trend`, `compare_category_baseline`, atau tool lain yang menurutmu relevan) untuk memverifikasi apakah temuan tersebut valid atau ada penjelasan bisnis yang sah.
-3. Berikan `llm_semantic_adjustment` (nilai -20 hingga +20) berdasarkan hasil investigasimu.
+1. Pahami temuan, evidence, dan skor domain dari Agent 1 dan Agent 2.
+2. Review skor dan trigger objektif Agent 1 dan Agent 2. Jangan menghitung ulang skor objektif dari nol; validasi apakah trigger tersebut layak diterima, perlu dibantah, atau perlu konteks tambahan.
+3. Gunakan tools yang tersedia (seperti `get_sales_trend`, `compare_category_baseline`, atau tool lain yang menurutmu relevan) untuk memverifikasi apakah temuan tersebut valid atau ada penjelasan bisnis yang sah.
+4. Berikan `llm_semantic_adjustment` (nilai -20 hingga +20) berdasarkan hasil investigasimu.
    - Jika kamu menemukan *counter-evidence* (misal: pengeluaran besar terjustifikasi oleh tren sales), berikan adjustment negatif (misal -15) agar skor risiko turun.
    - Jika temuan semakin mencurigakan, berikan adjustment positif.
    - Jika tidak ada temuan baru, berikan 0.
@@ -90,7 +91,7 @@ Ingat: kembalikan HANYA format JSON di output akhirmu!
         find_duplicate_expenses,
         get_vendor_history
     ]
-    
+
     config = types.GenerateContentConfig(
         tools=tools_list,
         temperature=0.2,
@@ -102,9 +103,10 @@ Ingat: kembalikan HANYA format JSON di output akhirmu!
     models_to_try = [
         'models/gemini-3.5-flash',
         'models/gemini-3.6-flash',
-        'models/gemini-3.5-flash-lite'
+        'models/gemini-3.5-flash-lite',
+        'models/gemini-3-flash-preview'
     ]
-    
+
     response = None
     for idx, model_name in enumerate(models_to_try):
         print(f"[Agent 3] Mengevaluasi evidence dan memanggil tools ({model_name})...")
@@ -114,16 +116,17 @@ Ingat: kembalikan HANYA format JSON di output akhirmu!
             break
         except Exception as e:
             error_str = str(e)
+            print(f"[Agent 3] Error pada model {model_name}: {error_str}")
             is_overloaded = any(err in error_str for err in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"])
             if is_overloaded and idx < len(models_to_try) - 1:
-                print(f"[Agent 3] Model {model_name} overloaded/error. Fallback ke model berikutnya...")
+                print(f"[Agent 3] Fallback ke model berikutnya...")
                 continue
             raise e
-    
+
     content = response.text
     print("\n[Agent 3] Selesai Investigasi. Laporan Akhir:")
     print(content)
-    
+
     class MockMessage:
         def __init__(self, c):
             self.content = c
