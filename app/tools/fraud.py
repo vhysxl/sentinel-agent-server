@@ -5,31 +5,46 @@ from app.db.models import Transaction, Vendor
 
 def find_duplicate_expenses(amount: float, vendor_id: int, date: str) -> List[Dict[str, Any]]:
     """
-    Mencari transaksi dengan nominal yang persis sama pada waktu yang berdekatan (< 24 jam).
-    Digunakan untuk mendeteksi indikasi 'Split Payment' atau tagihan ganda.
+    Mencari transaksi ke vendor yang sama dengan nominal persis sama dalam
+    rentang +/- 24 jam. Parameter `date` diinterpretasikan sebagai waktu WIB.
     """
     db = SessionLocal()
     try:
+        # Dua hal yang harus eksplisit soal zona waktu:
+        # 1. `date` datang sebagai waktu WIB naif. Tanpa AT TIME ZONE, Postgres
+        #    menafsirkannya memakai timezone sesi (GMT di server ini), sehingga
+        #    batas jendela meleset 7 jam.
+        # 2. transaction_date dikembalikan dalam WIB, bukan UTC mentah — kalau
+        #    tidak, LLM akan menarasikan jam yang salah.
         sql = text("""
-            SELECT id, amount, transaction_date, description
-            FROM transactions
-            WHERE vendor_id = :vendor_id
-              AND amount = :amount
-              AND transaction_date >= CAST(:date AS TIMESTAMP) - INTERVAL '24 hours'
-              AND transaction_date <= CAST(:date AS TIMESTAMP) + INTERVAL '24 hours'
-            ORDER BY transaction_date ASC
+            WITH anchor AS (
+                SELECT CAST(:date AS TIMESTAMP) AT TIME ZONE 'Asia/Jakarta' AS ts
+            )
+            SELECT t.id, t.amount,
+                   to_char(t.transaction_date AT TIME ZONE 'Asia/Jakarta',
+                           'YYYY-MM-DD HH24:MI:SS') AS date_wib,
+                   t.description, t.invoice_no
+            FROM transactions t, anchor a
+            WHERE t.vendor_id = :vendor_id
+              AND t.amount = :amount
+              AND t.type = 'expense'
+              AND t.transaction_date BETWEEN a.ts - INTERVAL '24 hours'
+                                         AND a.ts + INTERVAL '24 hours'
+            ORDER BY t.transaction_date ASC
         """)
         rows = db.execute(sql, {"vendor_id": vendor_id, "amount": amount, "date": date}).fetchall()
-        
-        results = []
-        for row in rows:
-            results.append({
+
+        return [
+            {
                 "transaction_id": row[0],
                 "amount": float(row[1]),
-                "date": str(row[2]),
-                "description": row[3]
-            })
-        return results
+                "date": row[2],
+                "timezone": "Asia/Jakarta",
+                "description": row[3],
+                "invoice_no": row[4],
+            }
+            for row in rows
+        ]
     except Exception as e:
         return [{"error": str(e)}]
     finally:

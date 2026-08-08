@@ -1,0 +1,121 @@
+{
+  "generated_by": "scripts/seed_transactions.py",
+  "timezone": "Asia/Jakarta",
+  "approval_threshold": 25000000,
+  "cases": [
+    {
+      "id": "A",
+      "name": "Lonjakan pengeluaran",
+      "transaction_ids": [
+        187
+      ],
+      "expected_triggers": [
+        "z_score_anomaly"
+      ],
+      "expected_base_score": 50,
+      "expected_adjustment": "positive",
+      "expected_band": "High Risk",
+      "why": "45jt vs baseline vendor ~2jt; revenue bulan itu stagnan sehingga klaim 'demand tinggi' tidak terdukung."
+    },
+    {
+      "id": "B",
+      "name": "Duplicate payment",
+      "transaction_ids": [
+        220,
+        221
+      ],
+      "invoice_no": "INV-2026-0731",
+      "expected_triggers": [
+        "duplicate_confirmed",
+        "vendor_flagged",
+        "timing_outside_hours"
+      ],
+      "expected_base_score": 80,
+      "expected_adjustment": "zero",
+      "expected_band": "Critical Risk",
+      "why": "invoice_no sama dibayar dua kali; vendor high_risk; 23:15 WIB. Critical tercapai tanpa bantuan LLM."
+    },
+    {
+      "id": "B2",
+      "name": "Split payment",
+      "transaction_ids": [
+        222,
+        223,
+        224
+      ],
+      "expected_triggers": [
+        "split_payment",
+        "role_bypass"
+      ],
+      "expected_base_score": 60,
+      "expected_adjustment": "zero",
+      "expected_band": "High Risk",
+      "why": "3 x 24jt (pita 20-25jt) total 72jt melewati ambang 25jt, diinput finance_staff."
+    },
+    {
+      "id": "C",
+      "name": "Transaksi normal",
+      "transaction_ids": [
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186
+      ],
+      "expected_triggers": [],
+      "expected_band": null,
+      "expected_finding": false,
+      "why": "Tidak ada aturan kandidat yang terpicu; tidak boleh masuk pipeline sama sekali."
+    },
+    {
+      "id": "D",
+      "name": "False positive yang harus dibatalkan",
+      "transaction_ids": [
+        206
+      ],
+      "expected_triggers": [
+        "z_score_anomaly"
+      ],
+      "expected_base_score": 50,
+      "expected_adjustment": "negative",
+      "expected_band": "Low Risk",
+      "why": "Lonjakan besar tetapi revenue bulan itu naik ~42%; Agent 3 wajib menurunkan skor dan menyebut angka revenue."
+    },
+    {
+      "id": "E",
+      "name": "Lembur yang sah",
+      "transaction_ids": [
+        219
+      ],
+      "expected_triggers": [],
+      "expected_band": null,
+      "expected_finding": false,
+      "why": "Di luar jam kerja (21:30) tetapi nominal wajar dan vendor bersih. Membuktikan timing adalah amplifier, bukan pemicu kandidat."
+    }
+  ]
+}

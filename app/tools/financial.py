@@ -1,8 +1,9 @@
-from datetime import time
 from typing import Dict, Any, List
 from sqlalchemy import func, text
 from app.db.session import SessionLocal
 from app.db.models import Transaction, User, Vendor
+from app.core.config import WIB, WORK_START_HOUR, WORK_END_HOUR
+from app.core.roles import role_of
 
 def calculate_z_score(transaction_id: int) -> Dict[str, Any]:
     """
@@ -48,22 +49,76 @@ def calculate_z_score(transaction_id: int) -> Dict[str, Any]:
     finally:
         db.close()
 
-def get_sales_trend(department: str, month: str) -> Dict[str, Any]:
+def get_sales_trend(month: str) -> Dict[str, Any]:
     """
-    Mendapatkan tren penjualan atau KPI departemen pada bulan tertentu.
-    Digunakan untuk memverifikasi klaim bahwa pengeluaran besar dibutuhkan karena 'demand tinggi'.
+    Mendapatkan pertumbuhan revenue pada bulan tertentu dibanding bulan sebelumnya.
+    Digunakan untuk memverifikasi klaim bahwa pengeluaran besar dibutuhkan karena
+    'permintaan tinggi'. Format month: 'YYYY-MM' atau 'YYYY-MM-DD'.
     """
-    # Mock data for MVP, assuming it would query an external ERP/CRM system
-    return {
-        "department": department,
-        "month": month,
-        "trend_percentage": 0.5,
-        "description": "Stagnant (Kenaikan hanya 0.5%)"
-    }
+    db = SessionLocal()
+    try:
+        # Terima 'YYYY-MM' maupun 'YYYY-MM-DD'; normalkan ke hari pertama bulan.
+        month_key = month.strip()[:7] + "-01"
+
+        sql = text("""
+            SELECT month, revenue,
+                   LAG(revenue) OVER (ORDER BY month) AS prev_revenue
+            FROM monthly_revenue
+            ORDER BY month
+        """)
+        rows = db.execute(sql).fetchall()
+        if not rows:
+            return {
+                "month": month_key,
+                "status": "no_revenue_data",
+                "message": "Tabel monthly_revenue kosong; tren revenue tidak dapat diverifikasi."
+            }
+
+        target = next((r for r in rows if str(r[0]) == month_key), None)
+        if target is None:
+            return {
+                "month": month_key,
+                "status": "month_not_found",
+                "available_months": [str(r[0]) for r in rows],
+                "message": f"Tidak ada data revenue untuk {month_key}."
+            }
+
+        revenue = float(target[1])
+        prev = float(target[2]) if target[2] is not None else None
+
+        if prev is None or prev == 0:
+            return {
+                "month": month_key,
+                "revenue": revenue,
+                "status": "insufficient_history",
+                "message": "Tidak ada bulan pembanding sebelumnya."
+            }
+
+        growth = ((revenue - prev) / prev) * 100
+
+        # Ambang 25% dipakai konsisten dengan get_monthly_expense_trend supaya
+        # pertumbuhan revenue dan pertumbuhan biaya dapat dibandingkan setara.
+        if growth > 25:
+            status = "growing"
+        elif growth < -25:
+            status = "declining"
+        else:
+            status = "stagnant"
+
+        return {
+            "month": month_key,
+            "revenue": revenue,
+            "previous_month_revenue": prev,
+            "trend_percentage": round(growth, 2),
+            "status": status,
+            "description": f"Revenue {month_key}: {revenue:,.0f} vs bulan sebelumnya {prev:,.0f} ({growth:+.1f}%)."
+        }
+    finally:
+        db.close()
 
 def compare_category_baseline(transaction_id: int) -> Dict[str, Any]:
     """
-    Membandingkan nilai transaksi terhadap baseline kategori dan departemen yang sama.
+    Membandingkan nilai transaksi terhadap baseline kategori yang sama.
     Berguna untuk melihat apakah transaksi besar masih wajar di konteks kategorinya.
     """
     db = SessionLocal()
@@ -72,10 +127,8 @@ def compare_category_baseline(transaction_id: int) -> Dict[str, Any]:
         if not txn:
             return {"error": f"Transaction {transaction_id} not found."}
 
-        user = db.query(User).filter(User.id == txn.input_by_user_id).first()
-        if not user:
-            return {"error": f"User for transaction {transaction_id} not found."}
-
+        # Tidak ada dimensi departemen: aplikasi ini dipakai satu tim keuangan,
+        # jadi baseline yang bermakna adalah kategori, bukan struktur organisasi.
         stats_sql = text("""
             SELECT
                 COUNT(*) AS sample_size,
@@ -84,16 +137,13 @@ def compare_category_baseline(transaction_id: int) -> Dict[str, Any]:
                 MIN(t.amount) AS min_amount,
                 MAX(t.amount) AS max_amount
             FROM transactions t
-            JOIN users u ON t.input_by_user_id = u.id
             WHERE t.type = :txn_type
               AND t.category = :category
-              AND u.department = :department
               AND t.id != :transaction_id
         """)
         result = db.execute(stats_sql, {
             "txn_type": txn.type,
             "category": txn.category,
-            "department": user.department,
             "transaction_id": transaction_id
         }).fetchone()
 
@@ -102,9 +152,9 @@ def compare_category_baseline(transaction_id: int) -> Dict[str, Any]:
             return {
                 "transaction_id": transaction_id,
                 "category": txn.category,
-                "department": user.department,
+                "sample_size": sample_size,
                 "status": "insufficient_data",
-                "message": "Tidak ada baseline kategori/departemen yang cukup untuk pembanding."
+                "message": "Tidak ada baseline kategori yang cukup untuk pembanding."
             }
 
         mean_amount = float(result[1])
@@ -123,11 +173,10 @@ def compare_category_baseline(transaction_id: int) -> Dict[str, Any]:
         return {
             "transaction_id": transaction_id,
             "category": txn.category,
-            "department": user.department,
             "sample_size": sample_size,
             "transaction_amount": amount,
-            "category_department_mean": round(mean_amount, 2),
-            "category_department_stddev": round(stddev_amount, 2),
+            "category_mean": round(mean_amount, 2),
+            "category_stddev": round(stddev_amount, 2),
             "ratio_to_mean": round(ratio_to_mean, 2),
             "z_score": round(z_score, 2),
             "status": status,
@@ -198,7 +247,8 @@ def get_vendor_transaction_history(vendor_id: int) -> Dict[str, Any]:
 
 def check_transaction_timing(transaction_id: int) -> Dict[str, Any]:
     """
-    Mengecek apakah transaksi dibuat pada waktu yang tidak lazim seperti akhir pekan atau luar jam kerja.
+    Mengecek apakah transaksi dicatat di dalam atau di luar jam kerja (WIB).
+    Jam kerja = Senin-Jumat, 08:00-17:59. Selain itu dianggap di luar jam kerja.
     """
     db = SessionLocal()
     try:
@@ -206,29 +256,25 @@ def check_transaction_timing(transaction_id: int) -> Dict[str, Any]:
         if not txn:
             return {"error": f"Transaction {transaction_id} not found."}
 
-        txn_time = txn.transaction_date.time()
-        is_weekend = txn.transaction_date.weekday() >= 5
-        is_after_hours = txn_time < time(8, 0) or txn_time > time(18, 0)
-        is_midnight_window = txn_time < time(5, 0)
+        # WAJIB dikonversi ke WIB dulu. transaction_date bertipe timestamptz dan
+        # server database ber-timezone GMT, jadi membaca .time() langsung akan
+        # menghasilkan jam UTC — 09:00 WIB akan terbaca 02:00 dan salah ditandai.
+        local = txn.transaction_date.astimezone(WIB)
 
-        flags = []
-        if is_weekend:
-            flags.append("weekend")
-        if is_after_hours:
-            flags.append("outside_business_hours")
-        if is_midnight_window:
-            flags.append("midnight_window")
+        is_workday = local.weekday() < 5
+        is_workhour = WORK_START_HOUR <= local.hour < WORK_END_HOUR
+        outside = not (is_workday and is_workhour)
 
         return {
             "transaction_id": transaction_id,
-            "transaction_date": str(txn.transaction_date),
-            "weekday": txn.transaction_date.strftime("%A"),
-            "time": txn_time.strftime("%H:%M:%S"),
-            "is_weekend": is_weekend,
-            "is_after_hours": is_after_hours,
-            "is_midnight_window": is_midnight_window,
-            "flags": flags,
-            "status": "unusual_timing" if flags else "normal_timing"
+            "transaction_date_wib": local.strftime("%Y-%m-%d %H:%M:%S"),
+            "weekday": local.strftime("%A"),
+            "time_wib": local.strftime("%H:%M:%S"),
+            "timezone": "Asia/Jakarta",
+            "work_hours": f"Senin-Jumat {WORK_START_HOUR:02d}:00-{WORK_END_HOUR - 1:02d}:59",
+            "is_workday": is_workday,
+            "is_work_hour": is_workhour,
+            "status": "outside_hours" if outside else "normal",
         }
     finally:
         db.close()
@@ -274,9 +320,9 @@ def get_user_spending_pattern(user_id: int) -> Dict[str, Any]:
 
         return {
             "user_id": user_id,
-            "username": user.username,
-            "role": user.role,
-            "department": user.department,
+            "email": user.email,
+            "fullname": user.fullname,
+            "role": role_of(user.is_admin),
             "total_transactions": int(stats.total_transactions or 0),
             "mean_amount": round(float(stats.mean_amount or 0), 2),
             "max_amount": round(float(stats.max_amount or 0), 2),
@@ -303,30 +349,30 @@ def get_user_spending_pattern(user_id: int) -> Dict[str, Any]:
     finally:
         db.close()
 
-def get_monthly_expense_trend(department: str, months: int = 6) -> Dict[str, Any]:
+def get_monthly_expense_trend(months: int = 6) -> Dict[str, Any]:
     """
-    Mengambil tren expense bulanan departemen dari tabel transaksi.
-    Berguna untuk membandingkan lonjakan transaksi dengan tren biaya aktual, bukan hanya sales trend mock.
+    Mengambil tren total expense bulanan dari tabel transaksi.
+    Berguna untuk membandingkan lonjakan sebuah transaksi dengan tren biaya aktual.
     """
     db = SessionLocal()
     try:
+        # Bulan dikelompokkan dalam WIB agar transaksi larut malam tidak jatuh ke
+        # bulan sebelumnya seperti kalau dikelompokkan dalam UTC.
         sql = text("""
             SELECT
-                DATE_TRUNC('month', t.transaction_date) AS month,
+                DATE_TRUNC('month', t.transaction_date AT TIME ZONE 'Asia/Jakarta') AS month,
                 COUNT(*) AS transaction_count,
                 SUM(t.amount) AS total_expense,
                 AVG(t.amount) AS mean_expense
             FROM transactions t
-            JOIN users u ON t.input_by_user_id = u.id
             WHERE t.type = 'expense'
-              AND u.department = :department
               AND t.transaction_date >= (
                   SELECT MAX(transaction_date) FROM transactions
               ) - (:months || ' months')::interval
-            GROUP BY DATE_TRUNC('month', t.transaction_date)
+            GROUP BY DATE_TRUNC('month', t.transaction_date AT TIME ZONE 'Asia/Jakarta')
             ORDER BY month
         """)
-        rows = db.execute(sql, {"department": department, "months": months}).fetchall()
+        rows = db.execute(sql, {"months": months}).fetchall()
         trend: List[Dict[str, Any]] = [
             {
                 "month": str(row[0].date()) if row[0] else None,
@@ -352,7 +398,6 @@ def get_monthly_expense_trend(department: str, months: int = 6) -> Dict[str, Any
                 trend_status = "expense_stable"
 
         return {
-            "department": department,
             "months_requested": months,
             "growth_percentage": round(growth_percentage, 2),
             "trend_status": trend_status,
@@ -363,14 +408,17 @@ def get_monthly_expense_trend(department: str, months: int = 6) -> Dict[str, Any
 
 def get_transaction_details(transaction_id: int) -> dict:
     """
-    Mengambil detail sebuah transaksi (termasuk informasi departemen pembuatnya).
+    Mengambil detail sebuah transaksi beserta vendor dan siapa yang menginputnya.
     Gunakan ini pertama kali untuk mengetahui konteks transaksi!
     """
     db = SessionLocal()
     try:
         sql = text("""
-            SELECT t.id, t.transaction_date, t.amount, t.category, t.description,
-                   t.vendor_id, t.input_by_user_id, v.vendor_name, u.department, u.username
+            SELECT t.id,
+                   t.transaction_date AT TIME ZONE 'Asia/Jakarta' AS date_wib,
+                   t.amount, t.type, t.category, t.description, t.invoice_no,
+                   t.vendor_id, v.vendor_name, v.status AS vendor_status,
+                   t.input_by_user_id, u.fullname, u.is_admin
             FROM transactions t
             LEFT JOIN vendors v ON t.vendor_id = v.id
             LEFT JOIN users u ON t.input_by_user_id = u.id
@@ -379,18 +427,23 @@ def get_transaction_details(transaction_id: int) -> dict:
         result = db.execute(sql, {"tid": transaction_id}).fetchone()
         if not result:
             return {"error": "Transaction not found"}
-            
+
         return {
             "transaction_id": result[0],
+            # Sudah dalam WIB. Semua penilaian jam memakai nilai ini.
             "transaction_date": str(result[1]),
+            "timezone": "Asia/Jakarta",
             "amount": float(result[2]),
-            "category": result[3],
-            "description": result[4],
-            "vendor_id": result[5],
-            "input_by_user_id": result[6],
-            "vendor_name": result[7],
-            "department": result[8],
-            "input_by_user": result[9]
+            "type": result[3],
+            "category": result[4],
+            "description": result[5],
+            "invoice_no": result[6],
+            "vendor_id": result[7],
+            "vendor_name": result[8],
+            "vendor_status": result[9],
+            "input_by_user_id": result[10],
+            "input_by_user": result[11],
+            "input_by_role": role_of(result[12]),
         }
     finally:
         db.close()

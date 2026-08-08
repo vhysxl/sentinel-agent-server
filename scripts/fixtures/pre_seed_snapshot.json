@@ -1,0 +1,92 @@
+[
+  {
+    "id": 1,
+    "transaction_date": "2023-10-01T10:00:00",
+    "amount": "1500.50",
+    "type": "income",
+    "category": "sales",
+    "description": "Sell 50 Paperbag",
+    "vendor_id": 1,
+    "input_by_user_id": 8
+  },
+  {
+    "id": 2,
+    "transaction_date": "2024-03-02T11:00:00",
+    "amount": "500000.00",
+    "type": "expense",
+    "category": "Office Supplies",
+    "description": "Pembelian alat tulis kantor",
+    "vendor_id": 2,
+    "input_by_user_id": 8
+  },
+  {
+    "id": 3,
+    "transaction_date": "2023-10-01T10:00:00",
+    "amount": "999.50",
+    "type": "expense",
+    "category": "office_supplies",
+    "description": "Buying some paper",
+    "vendor_id": 1,
+    "input_by_user_id": 7
+  },
+  {
+    "id": 4,
+    "transaction_date": "2023-10-01T10:00:00",
+    "amount": "4500.50",
+    "type": "income",
+    "category": "barang",
+    "description": "Buying some paper",
+    "vendor_id": 1,
+    "input_by_user_id": 7
+  },
+  {
+    "id": 5,
+    "transaction_date": "2023-10-01T10:00:00",
+    "amount": "1500.50",
+    "type": "income",
+    "category": "sales",
+    "description": "Sell 50 Paperbag",
+    "vendor_id": 1,
+    "input_by_user_id": 7
+  },
+  {
+    "id": 6,
+    "transaction_date": "2023-10-01T10:00:00",
+    "amount": "1500.50",
+    "type": "income",
+    "category": "Sales",
+    "description": "Sell 50 Paperbag",
+    "vendor_id": null,
+    "input_by_user_id": 7
+  },
+  {
+    "id": 16,
+    "transaction_date": "2026-08-06T00:00:00",
+    "amount": "4444.00",
+    "type": "income",
+    "category": "B2B Sales",
+    "description": "Mobil",
+    "vendor_id": 3,
+    "input_by_user_id": 7
+  },
+  {
+    "id": 17,
+    "transaction_date": "2026-08-06T00:00:00",
+    "amount": "20000.00",
+    "type": "expense",
+    "category": "Payroll & Benefits",
+    "description": "Gaji Gua",
+    "vendor_id": null,
+    "input_by_user_id": 7
+  },
+  {
+    "id": 18,
+    "transaction_date": "2026-08-07T00:00:00",
+    "amount": "1000000.00",
+    "type": "income",
+    "category": "Sales",
+    "description": "Income",
+    "vendor_id": 3,
+    "input_by_user_id": 7
+  }
+]
