@@ -4,68 +4,63 @@
     "related_transaction_ids": [
       187
     ],
-    "finding": "Evaluasi akhir mengonfirmasi bahwa transaksi ID 187 senilai Rp45.000.000 memiliki anomali finansial yang signifikan. Klaim pada deskripsi transaksi mengenai 'demand operasional sangat tinggi' tidak terbukti karena tren penjualan Juli 2026 stagnan (+0,97%). Transaksi ini mencapai 25 kali lipat rata-rata baseline kategori Office Supplies (Rp1.795.610) dan jauh melampaui pola rata-rata transaksi user Yogi Ferdiansyah untuk kategori tersebut (Rp5.330.476). Meskipun vendor CV. ATK Sejahtera sah dan tidak ditemukan transaksi ganda, ketidaksesuaian antara deskripsi dan fakta bisnis meningkatkan kecurigaan.",
+    "finding": "Evaluasi terhadap transaksi ID 187 menunjukkan tidak adanya counter-evidence yang dapat menjustifikasi pengeluaran sebesar Rp45.000.000 untuk kategori Office Supplies. Klaim deskripsi transaksi mengenai 'demand operasional sangat tinggi' tidak didukung oleh data pertumbuhan revenue bulanan yang stagnan (+0,97%). Transaksi ini terbukti menjadi outlier ekstrim baik pada baseline vendor maupun baseline kategori Office Supplies (25x rata-rata kategori). Ditambah dengan ditemukannya anomali administratif berupa tanggal transaksi sebelum tanggal pendaftaran vendor (backdated), tingkat risiko transaksi ini semakin terkonfirmasi.",
     "provenance": {
       "generated_by": "Agent_3_Final_Review",
       "tools_used": [
+        "calculate_z_score",
+        "check_transaction_timing",
+        "compare_category_baseline",
+        "find_duplicate_expenses",
+        "get_monthly_expense_trend",
         "get_sales_trend",
         "get_transaction_details",
+        "get_user_spending_pattern",
         "get_vendor_history",
-        "find_duplicate_expenses",
-        "check_transaction_timing",
-        "get_vendor_transaction_history",
-        "get_monthly_expense_trend",
-        "compare_category_baseline",
-        "calculate_z_score",
-        "get_user_spending_pattern"
-      ]
+        "get_vendor_transaction_history"
+      ],
+      "scored_by": "python_scoring_engine"
     },
     "evidence": {
       "objective": [
         {
-          "metric": "z_score",
-          "value": 87.75,
-          "status": "anomali ekstrim"
-        },
-        {
-          "metric": "timing",
-          "value": "16:45:00",
-          "status": "normal_working_hours"
-        },
-        {
-          "metric": "vendor_history",
-          "value": "established_vendor",
-          "status": "nominal_unusual"
-        },
-        {
-          "metric": "duplicate_transaction",
-          "value": "1 ditemukan (hanya transaksi ID 187 sendiri)",
-          "status": "normal"
-        },
-        {
-          "metric": "vendor_history",
-          "value": "established_vendor",
-          "status": "valid"
+          "code": "z_score_anomaly",
+          "points": 50,
+          "owner": "agent_1_financial",
+          "amplifier_only": false,
+          "narrative": "Nominal 45,000,000 berada pada modified z-score 94.8 terhadap 30 transaksi pembanding (median 1,699,226, MAD 308,100, ambang 3.5). Baseline: vendor.",
+          "detail": {
+            "scope": "vendor",
+            "method": "vendor_mad",
+            "n_baseline": 30,
+            "median": 1699226.42,
+            "mad": 308100.18,
+            "threshold": 3.5,
+            "computed_value": 94.8,
+            "confidence": "high",
+            "is_anomaly": true,
+            "message": "Nominal 45,000,000 berada pada modified z-score 94.8 terhadap 30 transaksi pembanding (median 1,699,226, MAD 308,100, ambang 3.5). Baseline: vendor."
+          }
         }
       ],
       "semantic": [
         {
-          "insight": "Tren penjualan bulan Juli 2026 hanya tumbuh +0,97% (stagnan), membantah klaim deskripsi transaksi mengenai lonjakan demand operasional.",
-          "source": "get_sales_trend"
+          "source": "get_sales_trend",
+          "insight": "Deskripsi transaksi mengklaim demand operasional sangat tinggi, namun tren penjualan bulan Juli 2026 hanya tumbuh 0,97% (stagnan), membantah alasan bisnis pengeluaran besar tersebut."
         },
         {
-          "insight": "Nominal Rp45.000.000 berada 25,06x di atas rata-rata baseline kategori Office Supplies (Rp1.795.610).",
-          "source": "compare_category_baseline"
+          "source": "compare_category_baseline",
+          "insight": "Nominal transaksi Rp45.000.000 bernilai 25x lebih besar dari rata-rata kategori Office Supplies (Rp1.795.609) dengan z-score kategori 87.75."
         },
         {
-          "insight": "User Yogi Ferdiansyah memiliki rata-rata pengeluaran Office Supplies sebesar Rp5.330.476, sehingga nominal transaksi ini jauh di atas kebiasaan penginputan user.",
-          "source": "get_user_spending_pattern"
+          "source": "get_user_spending_pattern",
+          "insight": "Rata-rata pengeluaran staf pembeli (Yogi Ferdiansyah) untuk kategori Office Supplies adalah Rp5.330.476, menjadikan pengeluaran Rp45.000.000 ini jauh melampaui pola transaksi normalnya."
         }
       ]
     },
     "agent_results": {
       "agent1": {
-        "finding": "Transaksi ID 187 senilai Rp45.000.000 untuk pembelian ATK borongan menunjukkan anomali z-score yang sangat ekstrem (87.75) dibandingkan rata-rata historis pengeluaran kategori. Meskipun waktu pencatatan berada pada jam kerja normal (Senin, 16:45 WIB) dan vendor (CV. ATK Sejahtera) merupakan vendor lama (established) dengan total 31 transaksi, nominal transaksi ini melonjak sangat jauh di atas rata-rata historis transaksi vendor yang hanya sebesar Rp3.189.299,98.",
+        "finding": "Transaksi ID 187 senilai Rp45.000.000 untuk pembelian ATK borongan menunjukkan anomali nominal yang sangat ekstrim dengan modified z-score sebesar 94.8 terhadap riwayat transaksi vendor CV. ATK Sejahtera (median Rp1.699.226). Meskipun demikian, transaksi ini dilakukan pada jam kerja normal (Senin, 16:45 WIB) dan menggunakan vendor yang sudah terdaftar lama (established vendor dengan total 31 transaksi).",
         "provenance": {
           "generated_by": "Agent_1_Financial_Analytics",
           "tools_used": [
@@ -79,31 +74,24 @@
           "objective": [
             {
               "metric": "z_score",
-              "value": 87.75,
+              "value": 94.8,
               "status": "anomali ekstrim"
             },
             {
               "metric": "timing",
               "value": "16:45:00",
-              "status": "normal_working_hours"
+              "status": "normal_timing"
             },
             {
               "metric": "vendor_history",
               "value": "established_vendor",
-              "status": "nominal_unusual"
+              "status": "normal"
             }
-          ]
-        },
-        "scoring": {
-          "domain": "Agent 1 Financial",
-          "base_score": 40,
-          "objective_triggers": [
-            "Agent 1 Financial: Z-Score 87.75 (+40)"
           ]
         }
       },
       "agent2": {
-        "finding": "Investigasi transaksi ID 187 (nominal Rp 45.000.000 ke CV. ATK Sejahtera) menunjukkan tidak adanya pola transaksi ganda atau split payment dalam rentang waktu +/- 24 jam. Rekam jejak vendor menunjukkan CV. ATK Sejahtera adalah vendor terverifikasi (established_vendor) dengan total 31 transaksi dan tidak memiliki indikasi risiko (risk_flag: false).",
+        "finding": "Investigasi terhadap transaksi ID 187 menunjukkan tidak adanya transaksi duplikat (split payment) dengan nominal Rp45.000.000 pada vendor CV. ATK Sejahtera dalam rentang waktu 24 jam. Vendor ini berstatus 'established_vendor' dengan total 31 transaksi dan tidak memiliki risk flag. Namun, terdapat kejanggalan administratif yang signifikan di mana tanggal transaksi (13 Juli 2026) terjadi sebelum tanggal bergabungnya vendor di sistem (5 Agustus 2026), yang mengindikasikan adanya potensi pencatatan mundur (backdated transaction) atau anomali data pendaftaran vendor.",
         "provenance": {
           "generated_by": "Agent_2_Fraud_Investigator",
           "tools_used": [
@@ -116,80 +104,89 @@
           "objective": [
             {
               "metric": "duplicate_transaction",
-              "value": "1 ditemukan (hanya transaksi ID 187 sendiri)",
-              "status": "normal"
+              "value": "0 duplikat ditemukan",
+              "status": "aman"
             },
             {
               "metric": "vendor_history",
               "value": "established_vendor",
-              "status": "valid"
+              "status": "aman tetapi terdapat anomali tanggal bergabung (join_date setelah transaction_date)"
             }
           ]
-        },
-        "scoring": {
-          "domain": "Agent 2 Fraud",
-          "base_score": 0,
-          "objective_triggers": []
         }
       },
       "agent3": {
-        "finding": "Evaluasi akhir mengonfirmasi bahwa transaksi ID 187 senilai Rp45.000.000 memiliki anomali finansial yang signifikan. Klaim pada deskripsi transaksi mengenai 'demand operasional sangat tinggi' tidak terbukti karena tren penjualan Juli 2026 stagnan (+0,97%). Transaksi ini mencapai 25 kali lipat rata-rata baseline kategori Office Supplies (Rp1.795.610) dan jauh melampaui pola rata-rata transaksi user Yogi Ferdiansyah untuk kategori tersebut (Rp5.330.476). Meskipun vendor CV. ATK Sejahtera sah dan tidak ditemukan transaksi ganda, ketidaksesuaian antara deskripsi dan fakta bisnis meningkatkan kecurigaan.",
+        "finding": "Evaluasi terhadap transaksi ID 187 menunjukkan tidak adanya counter-evidence yang dapat menjustifikasi pengeluaran sebesar Rp45.000.000 untuk kategori Office Supplies. Klaim deskripsi transaksi mengenai 'demand operasional sangat tinggi' tidak didukung oleh data pertumbuhan revenue bulanan yang stagnan (+0,97%). Transaksi ini terbukti menjadi outlier ekstrim baik pada baseline vendor maupun baseline kategori Office Supplies (25x rata-rata kategori). Ditambah dengan ditemukannya anomali administratif berupa tanggal transaksi sebelum tanggal pendaftaran vendor (backdated), tingkat risiko transaksi ini semakin terkonfirmasi.",
         "provenance": {
           "generated_by": "Agent_3_Evidence_Review",
           "tools_used": [
             "get_transaction_details",
-            "get_sales_trend",
             "compare_category_baseline",
-            "get_user_spending_pattern",
-            "get_monthly_expense_trend"
+            "get_sales_trend",
+            "get_monthly_expense_trend",
+            "get_user_spending_pattern"
           ]
         },
         "evidence": {
           "semantic": [
             {
-              "insight": "Tren penjualan bulan Juli 2026 hanya tumbuh +0,97% (stagnan), membantah klaim deskripsi transaksi mengenai lonjakan demand operasional.",
-              "source": "get_sales_trend"
+              "source": "get_sales_trend",
+              "insight": "Deskripsi transaksi mengklaim demand operasional sangat tinggi, namun tren penjualan bulan Juli 2026 hanya tumbuh 0,97% (stagnan), membantah alasan bisnis pengeluaran besar tersebut."
             },
             {
-              "insight": "Nominal Rp45.000.000 berada 25,06x di atas rata-rata baseline kategori Office Supplies (Rp1.795.610).",
-              "source": "compare_category_baseline"
+              "source": "compare_category_baseline",
+              "insight": "Nominal transaksi Rp45.000.000 bernilai 25x lebih besar dari rata-rata kategori Office Supplies (Rp1.795.609) dengan z-score kategori 87.75."
             },
             {
-              "insight": "User Yogi Ferdiansyah memiliki rata-rata pengeluaran Office Supplies sebesar Rp5.330.476, sehingga nominal transaksi ini jauh di atas kebiasaan penginputan user.",
-              "source": "get_user_spending_pattern"
+              "source": "get_user_spending_pattern",
+              "insight": "Rata-rata pengeluaran staf pembeli (Yogi Ferdiansyah) untuk kategori Office Supplies adalah Rp5.330.476, menjadikan pengeluaran Rp45.000.000 ini jauh melampaui pola transaksi normalnya."
             }
           ]
         },
         "scoring": {
-          "adjustment_reason": "Justifikasi bisnis pada deskripsi transaksi tidak didukung data tren penjualan (stagnan +0,97%) dan nilai pengeluaran 25x lebih besar dari baseline kategori.",
-          "llm_semantic_adjustment": 10
+          "llm_semantic_adjustment": 10,
+          "adjustment_reason": "Justifikasi bisnis pada deskripsi transaksi terbantahkan oleh data tren penjualan yang stagnan (+0,97%). Nominal transaksi juga terbukti 25x rata-rata kategori Office Supplies, serta diperkuat anomali pencatatan mundur (backdated)."
         }
       }
     },
     "scoring": {
-      "base_risk_score": 40,
+      "base_risk_score": 50,
+      "raw_score": 50,
+      "capped": false,
+      "max_base_score": 80,
       "agent_scores": [
         {
-          "domain": "Agent 1 Financial",
-          "base_score": 40,
-          "objective_triggers": [
-            "Agent 1 Financial: Z-Score 87.75 (+40)"
-          ]
-        },
-        {
-          "domain": "Agent 2 Fraud",
-          "base_score": 0,
-          "objective_triggers": []
+          "agent": "agent_1_financial",
+          "score": 50
         }
       ],
       "objective_triggers": [
-        "Agent 1 Financial: Z-Score 87.75 (+40)"
+        {
+          "code": "z_score_anomaly",
+          "points": 50,
+          "owner": "agent_1_financial",
+          "amplifier_only": false,
+          "narrative": "Nominal 45,000,000 berada pada modified z-score 94.8 terhadap 30 transaksi pembanding (median 1,699,226, MAD 308,100, ambang 3.5). Baseline: vendor.",
+          "detail": {
+            "scope": "vendor",
+            "method": "vendor_mad",
+            "n_baseline": 30,
+            "median": 1699226.42,
+            "mad": 308100.18,
+            "threshold": 3.5,
+            "computed_value": 94.8,
+            "confidence": "high",
+            "is_anomaly": true,
+            "message": "Nominal 45,000,000 berada pada modified z-score 94.8 terhadap 30 transaksi pembanding (median 1,699,226, MAD 308,100, ambang 3.5). Baseline: vendor."
+          }
+        }
       ],
+      "suppressed_triggers": [],
       "llm_semantic_adjustment": 10,
-      "adjustment_reason": "Justifikasi bisnis pada deskripsi transaksi tidak didukung data tren penjualan (stagnan +0,97%) dan nilai pengeluaran 25x lebih besar dari baseline kategori.",
-      "final_risk_score": 50,
-      "risk_level": "Medium Risk",
-      "recommendation": "Anomali ringan. Dicatat ke dalam audit report bulanan."
+      "adjustment_reason": "Justifikasi bisnis pada deskripsi transaksi terbantahkan oleh data tren penjualan yang stagnan (+0,97%). Nominal transaksi juga terbukti 25x rata-rata kategori Office Supplies, serta diperkuat anomali pencatatan mundur (backdated).",
+      "final_risk_score": 60,
+      "risk_level": "High Risk",
+      "recommendation": "Indikasi kecurangan. Butuh verifikasi manual (Manual Review)."
     }
   },
   {
@@ -197,100 +194,92 @@
     "related_transaction_ids": [
       206
     ],
-    "finding": "Meskipun transaksi ID 206 menunjukkan Z-Score yang sangat tinggi (45.35) pada kategori IT Services dengan nominal Rp 120.000.000, deskripsi transaksi menyebutkan penambahan kapasitas server dan lisensi untuk menopang lonjakan order. Verifikasi data sales menunjukkan adanya lonjakan revenue yang signifikan pada bulan Juni 2026 sebesar +43.39% (Rp 1.17 miliar dibanding Rp 816 juta bulan sebelumnya). Selain itu, vendor PT. Solusi Teknologi Makmur merupakan vendor terpercaya dengan 19 transaksi historis dan tidak ada indikasi duplikasi atau split payment. Oleh karena itu, lonjakan biaya ini memiliki justifikasi bisnis yang kuat untuk mendukung pertumbuhan operasional.",
+    "finding": "Evaluasi lanjutan pada transaksi ID 206 sebesar Rp 120.000.000 untuk PT. Solusi Teknologi Makmur (IT Services) menunjukkan adanya counter-evidence yang kuat. Deskripsi transaksi mengindikasikan 'Penambahan kapasitas server dan lisensi untuk menopang lonjakan order', yang terverifikasi valid karena data penjualan (sales trend) pada bulan Juni 2026 menunjukkan lonjakan revenue yang signifikan sebesar +43.39% (mencapai Rp 1.17 miliar dibanding Rp 816 juta pada bulan sebelumnya). Meskipun secara statistik transaksi ini merupakan outlier ekstrem (Z-score 36.26 terhadap vendor dan 45.35 terhadap kategori) dan dicatat oleh staf finance, peningkatan biaya infrastruktur TI ini sangat selaras dan terjustifikasi oleh kebutuhan operasional nyata untuk menopang lonjakan volume order yang tinggi.",
     "provenance": {
       "generated_by": "Agent_3_Final_Review",
       "tools_used": [
+        "calculate_z_score",
+        "check_transaction_timing",
+        "compare_category_baseline",
+        "find_duplicate_expenses",
         "get_sales_trend",
         "get_transaction_details",
         "get_vendor_history",
-        "find_duplicate_expenses",
-        "check_transaction_timing",
-        "get_vendor_transaction_history",
-        "compare_category_baseline",
-        "calculate_z_score"
-      ]
+        "get_vendor_transaction_history"
+      ],
+      "scored_by": "python_scoring_engine"
     },
     "evidence": {
       "objective": [
         {
-          "metric": "z_score",
-          "value": 45.35,
-          "status": "anomali ekstrim"
-        },
-        {
-          "metric": "timing",
-          "value": "14:20:00",
-          "status": "normal"
-        },
-        {
-          "metric": "vendor_history",
-          "value": "vendor_not_found",
-          "status": "mencurigakan"
-        },
-        {
-          "metric": "duplicate_transaction",
-          "value": "1 ditemukan",
-          "status": "normal"
-        },
-        {
-          "metric": "vendor_history",
-          "value": "established_vendor",
-          "status": "aman"
+          "code": "z_score_anomaly",
+          "points": 50,
+          "owner": "agent_1_financial",
+          "amplifier_only": false,
+          "narrative": "Nominal 120,000,000 berada pada modified z-score 36.3 terhadap 18 transaksi pembanding (median 10,407,977, MAD 2,038,758, ambang 3.5). Baseline: vendor.",
+          "detail": {
+            "scope": "vendor",
+            "method": "vendor_mad",
+            "n_baseline": 18,
+            "median": 10407976.54,
+            "mad": 2038757.69,
+            "threshold": 3.5,
+            "computed_value": 36.26,
+            "confidence": "high",
+            "is_anomaly": true,
+            "message": "Nominal 120,000,000 berada pada modified z-score 36.3 terhadap 18 transaksi pembanding (median 10,407,977, MAD 2,038,758, ambang 3.5). Baseline: vendor."
+          }
         }
       ],
       "semantic": [
         {
-          "source": "get_sales_trend",
-          "insight": "Revenue perusahaan melonjak 43.39% pada Juni 2026 (Rp 1,170,080,000 vs Rp 816,000,000), memvalidasi kebutuhan peningkatan kapasitas server dan infrastruktur IT."
+          "source": "get_transaction_details",
+          "insight": "Deskripsi transaksi mencatat kebutuhan penambahan kapasitas server dan lisensi untuk menopang lonjakan order."
         },
         {
-          "source": "get_transaction_details",
-          "insight": "Deskripsi transaksi secara spesifik menyatakan penambahan kapasitas server dan lisensi untuk menopang lonjakan order, sejalan dengan data pertumbuhan sales."
+          "source": "get_sales_trend",
+          "insight": "Revenue bulan Juni 2026 mengalami pertumbuhan masif sebesar +43.39% (Rp 1.17 miliar vs Rp 816 juta), memvalidasi kebutuhan eskalasi infrastruktur TI."
+        },
+        {
+          "source": "compare_category_baseline",
+          "insight": "Meskipun nominal 120 juta melampaui rata-rata kategori IT Services, eskalasi skala bisnis memberikan justifikasi operasional yang sah."
         }
       ]
     },
     "agent_results": {
       "agent1": {
-        "finding": "Investigasi transaksi 206 menunjukkan anomali pengeluaran ekstrem dengan Z-Score sebesar 45.35 (jumlah Rp 120.000.000 untuk kategori IT Services), yang jauh melampaui rata-rata historis sebesar Rp 10.165.908. Namun, transaksi dilakukan pada jam kerja normal (Hari Jumat pukul 14:20 WIB) oleh staff keuangan Yogi Ferdiansyah, dan vendor PT. Solusi Teknologi Makmur terdaftar sebagai vendor aktif.",
+        "finding": "Transaksi ID 206 sebesar Rp 120.000.000 dicatat oleh Yogi Ferdiansyah pada jam kerja normal (Jumat, 14:20 WIB) untuk vendor PT. Solusi Teknologi Makmur. Meskipun vendor ini tergolong vendor lama (established) dengan total 19 transaksi, nominal transaksi ini menunjukkan lonjakan anomali yang sangat ekstrem dengan modified Z-Score sebesar 36.26 jauh melampaui ambang batas normal (3.5) dibandingkan dengan median transaksi bulanan vendor yang berkisar Rp 10.407.977.",
         "provenance": {
           "generated_by": "Agent_1_Financial_Analytics",
           "tools_used": [
             "get_transaction_details",
             "calculate_z_score",
-            "get_vendor_transaction_history",
-            "check_transaction_timing"
+            "check_transaction_timing",
+            "get_vendor_transaction_history"
           ]
         },
         "evidence": {
           "objective": [
             {
               "metric": "z_score",
-              "value": 45.35,
-              "status": "anomali ekstrim"
+              "value": 36.26,
+              "status": "anomali_ekstrim"
             },
             {
               "metric": "timing",
               "value": "14:20:00",
-              "status": "normal"
+              "status": "jam_kerja_normal"
             },
             {
               "metric": "vendor_history",
-              "value": "vendor_not_found",
-              "status": "mencurigakan"
+              "value": "established_vendor",
+              "status": "histori_tercatat"
             }
-          ]
-        },
-        "scoring": {
-          "domain": "Agent 1 Financial",
-          "base_score": 40,
-          "objective_triggers": [
-            "Agent 1 Financial: Z-Score 45.35 (+40)"
           ]
         }
       },
       "agent2": {
-        "finding": "Investigasi terhadap transaksi ID 206 menunjukkan tidak ada indikasi transaksi ganda atau split payment (hanya ditemukan 1 transaksi dengan nominal dan waktu yang sama). Selain itu, berdasarkan riwayat vendor, PT. Solusi Teknologi Makmur merupakan vendor yang mapan (established_vendor) dengan total 19 transaksi dan tidak memiliki flag risiko.",
+        "finding": "Investigasi terhadap transaksi ID 206 tidak menemukan indikasi pola penipuan atau split payment. Tidak ada transaksi duplikat dengan nominal sama ke vendor yang sama dalam rentang 24 jam. Vendor PT. Solusi Teknologi Makmur merupakan vendor terverifikasi (established_vendor) dengan riwayat 19 transaksi dan tanpa catatan risiko.",
         "provenance": {
           "generated_by": "Agent_2_Fraud_Investigator",
           "tools_used": [
@@ -303,72 +292,85 @@
           "objective": [
             {
               "metric": "duplicate_transaction",
-              "value": "1 ditemukan",
-              "status": "normal"
+              "value": "0 duplikat ditemukan",
+              "status": "tidak ada indikasi split payment"
             },
             {
               "metric": "vendor_history",
               "value": "established_vendor",
-              "status": "aman"
+              "status": "normal"
             }
           ]
-        },
-        "scoring": {
-          "domain": "Agent 2 Fraud",
-          "base_score": 0,
-          "objective_triggers": []
         }
       },
       "agent3": {
-        "finding": "Meskipun transaksi ID 206 menunjukkan Z-Score yang sangat tinggi (45.35) pada kategori IT Services dengan nominal Rp 120.000.000, deskripsi transaksi menyebutkan penambahan kapasitas server dan lisensi untuk menopang lonjakan order. Verifikasi data sales menunjukkan adanya lonjakan revenue yang signifikan pada bulan Juni 2026 sebesar +43.39% (Rp 1.17 miliar dibanding Rp 816 juta bulan sebelumnya). Selain itu, vendor PT. Solusi Teknologi Makmur merupakan vendor terpercaya dengan 19 transaksi historis dan tidak ada indikasi duplikasi atau split payment. Oleh karena itu, lonjakan biaya ini memiliki justifikasi bisnis yang kuat untuk mendukung pertumbuhan operasional.",
+        "finding": "Evaluasi lanjutan pada transaksi ID 206 sebesar Rp 120.000.000 untuk PT. Solusi Teknologi Makmur (IT Services) menunjukkan adanya counter-evidence yang kuat. Deskripsi transaksi mengindikasikan 'Penambahan kapasitas server dan lisensi untuk menopang lonjakan order', yang terverifikasi valid karena data penjualan (sales trend) pada bulan Juni 2026 menunjukkan lonjakan revenue yang signifikan sebesar +43.39% (mencapai Rp 1.17 miliar dibanding Rp 816 juta pada bulan sebelumnya). Meskipun secara statistik transaksi ini merupakan outlier ekstrem (Z-score 36.26 terhadap vendor dan 45.35 terhadap kategori) dan dicatat oleh staf finance, peningkatan biaya infrastruktur TI ini sangat selaras dan terjustifikasi oleh kebutuhan operasional nyata untuk menopang lonjakan volume order yang tinggi.",
         "provenance": {
           "generated_by": "Agent_3_Evidence_Review",
           "tools_used": [
             "get_transaction_details",
-            "get_sales_trend",
-            "compare_category_baseline"
+            "compare_category_baseline",
+            "get_sales_trend"
           ]
         },
         "evidence": {
           "semantic": [
             {
-              "source": "get_sales_trend",
-              "insight": "Revenue perusahaan melonjak 43.39% pada Juni 2026 (Rp 1,170,080,000 vs Rp 816,000,000), memvalidasi kebutuhan peningkatan kapasitas server dan infrastruktur IT."
+              "source": "get_transaction_details",
+              "insight": "Deskripsi transaksi mencatat kebutuhan penambahan kapasitas server dan lisensi untuk menopang lonjakan order."
             },
             {
-              "source": "get_transaction_details",
-              "insight": "Deskripsi transaksi secara spesifik menyatakan penambahan kapasitas server dan lisensi untuk menopang lonjakan order, sejalan dengan data pertumbuhan sales."
+              "source": "get_sales_trend",
+              "insight": "Revenue bulan Juni 2026 mengalami pertumbuhan masif sebesar +43.39% (Rp 1.17 miliar vs Rp 816 juta), memvalidasi kebutuhan eskalasi infrastruktur TI."
+            },
+            {
+              "source": "compare_category_baseline",
+              "insight": "Meskipun nominal 120 juta melampaui rata-rata kategori IT Services, eskalasi skala bisnis memberikan justifikasi operasional yang sah."
             }
           ]
         },
         "scoring": {
           "llm_semantic_adjustment": -20,
-          "adjustment_reason": "Lonjakan pengeluaran IT terjustifikasi secara bisnis oleh pertumbuhan sales yang sangat tinggi (+43.39%) dan vendor merupakan vendor mapan tanpa indikasi fraud."
+          "adjustment_reason": "Lonjakan pengeluaran infrastruktur TI sepenuhnya terjustifikasi oleh pertumbuhan revenue perusahaan yang masif sebesar +43.39% pada bulan yang sama untuk menopang lonjakan order."
         }
       }
     },
     "scoring": {
-      "base_risk_score": 40,
+      "base_risk_score": 50,
+      "raw_score": 50,
+      "capped": false,
+      "max_base_score": 80,
       "agent_scores": [
         {
-          "domain": "Agent 1 Financial",
-          "base_score": 40,
-          "objective_triggers": [
-            "Agent 1 Financial: Z-Score 45.35 (+40)"
-          ]
-        },
-        {
-          "domain": "Agent 2 Fraud",
-          "base_score": 0,
-          "objective_triggers": []
+          "agent": "agent_1_financial",
+          "score": 50
         }
       ],
       "objective_triggers": [
-        "Agent 1 Financial: Z-Score 45.35 (+40)"
+        {
+          "code": "z_score_anomaly",
+          "points": 50,
+          "owner": "agent_1_financial",
+          "amplifier_only": false,
+          "narrative": "Nominal 120,000,000 berada pada modified z-score 36.3 terhadap 18 transaksi pembanding (median 10,407,977, MAD 2,038,758, ambang 3.5). Baseline: vendor.",
+          "detail": {
+            "scope": "vendor",
+            "method": "vendor_mad",
+            "n_baseline": 18,
+            "median": 10407976.54,
+            "mad": 2038757.69,
+            "threshold": 3.5,
+            "computed_value": 36.26,
+            "confidence": "high",
+            "is_anomaly": true,
+            "message": "Nominal 120,000,000 berada pada modified z-score 36.3 terhadap 18 transaksi pembanding (median 10,407,977, MAD 2,038,758, ambang 3.5). Baseline: vendor."
+          }
+        }
       ],
+      "suppressed_triggers": [],
       "llm_semantic_adjustment": -20,
-      "adjustment_reason": "Lonjakan pengeluaran IT terjustifikasi secara bisnis oleh pertumbuhan sales yang sangat tinggi (+43.39%) dan vendor merupakan vendor mapan tanpa indikasi fraud.",
-      "final_risk_score": 20,
+      "adjustment_reason": "Lonjakan pengeluaran infrastruktur TI sepenuhnya terjustifikasi oleh pertumbuhan revenue perusahaan yang masif sebesar +43.39% pada bulan yang sama untuk menopang lonjakan order.",
+      "final_risk_score": 30,
       "risk_level": "Low Risk",
       "recommendation": "Transaksi wajar. Otomatis disetujui (No Action)."
     }
@@ -379,71 +381,99 @@
       220,
       221
     ],
-    "finding": "Evaluasi akhir mengonfirmasi bahwa transaksi ID 220 sangat mencurigakan dan memiliki indikasi kuat manipulasi data. Meskipun nominal 25.000.000 berada dalam baseline kategori 'Consulting', hal ini menyesatkan karena ukuran sampel kategori yang kecil (n=4) dan kemungkinan besar tercemar oleh transaksi serupa. Bukti krusial ditemukan pada data vendor: CV Fiktif Sukses Makmur baru terdaftar di sistem pada Agustus 2026, namun transaksi dicatat terjadi pada Juli 2026 (backdated). Selain itu, pertumbuhan sales yang stagnan (+1%) tidak menjustifikasi urgensi pengeluaran jasa konsultasi besar di luar jam kerja. Pola transaksi user 'testingraihan' juga menunjukkan anomali di mana ia hanya bertransaksi dengan vendor berisiko ini untuk kategori Consulting.",
+    "finding": "Evaluasi akhir mengonfirmasi validitas temuan Agent 1 dan Agent 2. Transaksi ID 220 (sebesar Rp25.000.000) terkait dengan faktir INV-2026-0731 yang dibayarkan dua kali (split payment/duplikasi) dengan total Rp50.000.000 ke vendor 'CV Fiktif Sukses Makmur' yang berstatus 'high_risk'. Selain itu, transaksi dicatat di luar jam kerja (23:15:00 WIB). Pengecekan tren sales menunjukkan pertumbuhan yang stagnan (+0.97%), sehingga tidak ada justifikasi bisnis yang sah untuk pengeluaran mendadak di luar jam kerja ini. Tidak ditemukan counter-evidence yang meringankan.",
     "provenance": {
       "generated_by": "Agent_3_Final_Review",
       "tools_used": [
+        "calculate_z_score",
+        "check_transaction_timing",
+        "find_duplicate_expenses",
         "get_sales_trend",
         "get_transaction_details",
         "get_vendor_history",
-        "find_duplicate_expenses",
-        "check_transaction_timing",
-        "get_vendor_transaction_history",
-        "compare_category_baseline",
-        "calculate_z_score",
-        "get_user_spending_pattern"
-      ]
+        "get_vendor_transaction_history"
+      ],
+      "scored_by": "python_scoring_engine"
     },
     "evidence": {
       "objective": [
         {
-          "metric": "z_score",
-          "value": 0,
-          "status": "insufficient_data"
+          "code": "insufficient_baseline",
+          "points": 0,
+          "owner": "agent_1_financial",
+          "amplifier_only": true,
+          "narrative": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar.",
+          "detail": {
+            "scope": "none",
+            "method": "insufficient_baseline",
+            "n_baseline": 4,
+            "median": null,
+            "mad": null,
+            "threshold": 3.5,
+            "computed_value": null,
+            "confidence": "none",
+            "is_anomaly": false,
+            "message": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar."
+          }
         },
         {
-          "metric": "timing",
-          "value": "23:15:00",
-          "status": "outside_hours"
+          "code": "timing_outside_hours",
+          "points": 20,
+          "owner": "agent_1_financial",
+          "amplifier_only": true,
+          "narrative": "Transaksi tercatat Monday 20-07-2026 23:15 WIB, di luar jam kerja (Senin-Jumat 08:00-17:59).",
+          "detail": {
+            "time_wib": "23:15:00",
+            "weekday": "Monday",
+            "timezone": "Asia/Jakarta",
+            "work_hours": "08:00-17:59"
+          }
         },
         {
-          "metric": "vendor_history",
-          "value": "high_risk",
-          "status": "mencurigakan"
+          "code": "duplicate_confirmed",
+          "points": 50,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "Faktur INV-2026-0731 dibayar 2 kali ke vendor yang sama (total 50,000,000). Pembayaran pada 2026-07-20 23:15, 2026-07-21 01:15 WIB.",
+          "detail": {
+            "rule": "same_invoice_no",
+            "invoice_no": "INV-2026-0731",
+            "match_count": 2,
+            "total_amount": 50000000.0,
+            "transaction_ids": [
+              220,
+              221
+            ]
+          }
         },
         {
-          "metric": "duplicate_transaction",
-          "value": "2 ditemukan",
-          "status": "indikasi split payment"
-        },
-        {
-          "metric": "vendor_history",
-          "value": "new_vendor",
-          "status": "mencurigakan"
+          "code": "vendor_flagged",
+          "points": 30,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "Vendor CV Fiktif Sukses Makmur berstatus 'high_risk' di master data.",
+          "detail": {
+            "vendor_id": 5,
+            "vendor_name": "CV Fiktif Sukses Makmur",
+            "vendor_status": "high_risk",
+            "total_transactions": 2
+          }
         }
       ],
       "semantic": [
         {
-          "source": "get_vendor_history",
-          "insight": "Vendor baru terdaftar pada 2026-08-08, namun transaksi ID 220 dilakukan pada 2026-07-20. Indikasi kuat backdating/manipulasi data."
-        },
-        {
           "source": "get_sales_trend",
-          "insight": "Pertumbuhan revenue stagnan (+1%), tidak ada justifikasi bisnis untuk pengeluaran konsultasi tambahan yang mendesak."
+          "insight": "Pertumbuhan sales pada Juli 2026 tercatat stagnan (0.97%), sehingga tidak mendukung klaim lonjakan kebutuhan operasional mendadak."
         },
         {
-          "source": "compare_category_baseline",
-          "insight": "Nominal 25 juta berada di batas atas baseline, namun baseline tersebut tidak valid karena hanya terdiri dari 4 sampel yang kemungkinan besar adalah transaksi split payment yang sama."
-        },
-        {
-          "source": "get_user_spending_pattern",
-          "insight": "User 'testingraihan' memiliki rata-rata transaksi 6,7 juta, namun melakukan dua transaksi masing-masing 25 juta khusus ke vendor berisiko ini."
+          "source": "get_transaction_details",
+          "insight": "Transaksi dikonfirmasi sebagai duplikasi faktir INV-2026-0731 dengan vendor berstatus high_risk di luar jam kerja."
         }
       ]
     },
     "agent_results": {
       "agent1": {
-        "finding": "Investigasi transaksi ID 220 menunjukkan beberapa indikator mencurigakan: transaksi dilakukan di luar jam kerja (pukul 23:15:00 WIB), melibatkan vendor berisiko tinggi (CV Fiktif Sukses Makmur) dengan status vendor high_risk, serta histori data vendor yang tidak mencukupi untuk analisis Z-score standar.",
+        "finding": "Investigasi transaksi ID 220 menunjukkan beberapa indikator mencurigakan: dicatat di luar jam kerja (pukul 23:15:00 WIB), vendor tercatat dengan status high_risk (CV Fiktif Sukses Makmur), dan data historis vendor tidak mencukupi untuk analisis baseline statistik mendalam.",
         "provenance": {
           "generated_by": "Agent_1_Financial_Analytics",
           "tools_used": [
@@ -457,7 +487,7 @@
           "objective": [
             {
               "metric": "z_score",
-              "value": 0,
+              "value": 0.0,
               "status": "insufficient_data"
             },
             {
@@ -471,18 +501,10 @@
               "status": "mencurigakan"
             }
           ]
-        },
-        "scoring": {
-          "domain": "Agent 1 Financial",
-          "base_score": 50,
-          "objective_triggers": [
-            "Agent 1 Financial: Transaksi di luar kewajaran waktu (23:15:00) (+20)",
-            "Agent 1 Financial: Vendor baru/berisiko (+30)"
-          ]
         }
       },
       "agent2": {
-        "finding": "Investigasi transaksi ID 220 menunjukkan adanya indikasi penipuan berupa duplikasi transaksi (split payment / pembayaran ganda) dengan nominal 25.000.000 ke vendor yang sama dalam rentang waktu berdekatan (transaksi ID 220 dan 221 dengan invoice INV-2026-0731). Selain itu, status vendor adalah 'new_vendor' dengan tingkat risiko tinggi (high_risk / risk_flag true) yang memperkuat indikasi vendor fiktif.",
+        "finding": "Investigasi transaksi ID 220 menunjukkan indikasi kuat penipuan berupa transaksi ganda (duplikasi / split payment) dengan nominal persis Rp25.000.000 ke vendor yang sama (CV Fiktif Sukses Makmur) dalam rentang waktu berdekatan. Vendor ini tercatat berstatus 'new_vendor' dengan tingkat risiko tinggi (high_risk/risk_flag true) dan riwayat transaksi yang sangat minim, mengindikasikan potensi vendor fiktif.",
         "provenance": {
           "generated_by": "Agent_2_Fraud_Investigator",
           "tools_used": [
@@ -504,85 +526,370 @@
               "status": "mencurigakan"
             }
           ]
-        },
-        "scoring": {
-          "domain": "Agent 2 Fraud",
-          "base_score": 70,
-          "objective_triggers": [
-            "Agent 2 Fraud: Transaksi ganda/split payment (+40)",
-            "Agent 2 Fraud: Vendor baru/berisiko (+30)"
-          ]
         }
       },
       "agent3": {
-        "finding": "Evaluasi akhir mengonfirmasi bahwa transaksi ID 220 sangat mencurigakan dan memiliki indikasi kuat manipulasi data. Meskipun nominal 25.000.000 berada dalam baseline kategori 'Consulting', hal ini menyesatkan karena ukuran sampel kategori yang kecil (n=4) dan kemungkinan besar tercemar oleh transaksi serupa. Bukti krusial ditemukan pada data vendor: CV Fiktif Sukses Makmur baru terdaftar di sistem pada Agustus 2026, namun transaksi dicatat terjadi pada Juli 2026 (backdated). Selain itu, pertumbuhan sales yang stagnan (+1%) tidak menjustifikasi urgensi pengeluaran jasa konsultasi besar di luar jam kerja. Pola transaksi user 'testingraihan' juga menunjukkan anomali di mana ia hanya bertransaksi dengan vendor berisiko ini untuk kategori Consulting.",
+        "finding": "Evaluasi akhir mengonfirmasi validitas temuan Agent 1 dan Agent 2. Transaksi ID 220 (sebesar Rp25.000.000) terkait dengan faktir INV-2026-0731 yang dibayarkan dua kali (split payment/duplikasi) dengan total Rp50.000.000 ke vendor 'CV Fiktif Sukses Makmur' yang berstatus 'high_risk'. Selain itu, transaksi dicatat di luar jam kerja (23:15:00 WIB). Pengecekan tren sales menunjukkan pertumbuhan yang stagnan (+0.97%), sehingga tidak ada justifikasi bisnis yang sah untuk pengeluaran mendadak di luar jam kerja ini. Tidak ditemukan counter-evidence yang meringankan.",
         "provenance": {
           "generated_by": "Agent_3_Evidence_Review",
           "tools_used": [
             "get_transaction_details",
-            "compare_category_baseline",
-            "get_sales_trend",
-            "get_user_spending_pattern",
-            "get_vendor_history"
+            "get_sales_trend"
           ]
         },
         "evidence": {
           "semantic": [
             {
-              "source": "get_vendor_history",
-              "insight": "Vendor baru terdaftar pada 2026-08-08, namun transaksi ID 220 dilakukan pada 2026-07-20. Indikasi kuat backdating/manipulasi data."
-            },
-            {
               "source": "get_sales_trend",
-              "insight": "Pertumbuhan revenue stagnan (+1%), tidak ada justifikasi bisnis untuk pengeluaran konsultasi tambahan yang mendesak."
+              "insight": "Pertumbuhan sales pada Juli 2026 tercatat stagnan (0.97%), sehingga tidak mendukung klaim lonjakan kebutuhan operasional mendadak."
             },
             {
-              "source": "compare_category_baseline",
-              "insight": "Nominal 25 juta berada di batas atas baseline, namun baseline tersebut tidak valid karena hanya terdiri dari 4 sampel yang kemungkinan besar adalah transaksi split payment yang sama."
-            },
-            {
-              "source": "get_user_spending_pattern",
-              "insight": "User 'testingraihan' memiliki rata-rata transaksi 6,7 juta, namun melakukan dua transaksi masing-masing 25 juta khusus ke vendor berisiko ini."
+              "source": "get_transaction_details",
+              "insight": "Transaksi dikonfirmasi sebagai duplikasi faktir INV-2026-0731 dengan vendor berstatus high_risk di luar jam kerja."
             }
           ]
         },
         "scoring": {
-          "llm_semantic_adjustment": 15,
-          "adjustment_reason": "Ditemukan bukti manipulasi data (backdated vendor) dan ketidaksesuaian antara profil pengeluaran user dengan histori transaksi normal, memperkuat temuan fraud dari agent sebelumnya."
+          "llm_semantic_adjustment": 0,
+          "adjustment_reason": "Tidak ada counter-evidence atau pembenaran bisnis yang valid; seluruh indikator risiko tinggi dari Agent 1 dan Agent 2 terkonfirmasi kuat."
         }
       }
     },
     "scoring": {
       "base_risk_score": 80,
+      "raw_score": 100,
+      "capped": true,
+      "max_base_score": 80,
       "agent_scores": [
         {
-          "domain": "Agent 1 Financial",
-          "base_score": 50,
-          "objective_triggers": [
-            "Agent 1 Financial: Transaksi di luar kewajaran waktu (23:15:00) (+20)",
-            "Agent 1 Financial: Vendor baru/berisiko (+30)"
-          ]
+          "agent": "agent_1_financial",
+          "score": 20
         },
         {
-          "domain": "Agent 2 Fraud",
-          "base_score": 70,
-          "objective_triggers": [
-            "Agent 2 Fraud: Transaksi ganda/split payment (+40)",
-            "Agent 2 Fraud: Vendor baru/berisiko (+30)"
-          ]
+          "agent": "agent_2_fraud",
+          "score": 80
         }
       ],
       "objective_triggers": [
-        "Agent 1 Financial: Transaksi di luar kewajaran waktu (23:15:00) (+20)",
-        "Agent 1 Financial: Vendor baru/berisiko (+30)",
-        "Agent 2 Fraud: Transaksi ganda/split payment (+40)",
-        "Agent 2 Fraud: Vendor baru/berisiko (+30)"
+        {
+          "code": "insufficient_baseline",
+          "points": 0,
+          "owner": "agent_1_financial",
+          "amplifier_only": true,
+          "narrative": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar.",
+          "detail": {
+            "scope": "none",
+            "method": "insufficient_baseline",
+            "n_baseline": 4,
+            "median": null,
+            "mad": null,
+            "threshold": 3.5,
+            "computed_value": null,
+            "confidence": "none",
+            "is_anomaly": false,
+            "message": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar."
+          }
+        },
+        {
+          "code": "timing_outside_hours",
+          "points": 20,
+          "owner": "agent_1_financial",
+          "amplifier_only": true,
+          "narrative": "Transaksi tercatat Monday 20-07-2026 23:15 WIB, di luar jam kerja (Senin-Jumat 08:00-17:59).",
+          "detail": {
+            "time_wib": "23:15:00",
+            "weekday": "Monday",
+            "timezone": "Asia/Jakarta",
+            "work_hours": "08:00-17:59"
+          }
+        },
+        {
+          "code": "duplicate_confirmed",
+          "points": 50,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "Faktur INV-2026-0731 dibayar 2 kali ke vendor yang sama (total 50,000,000). Pembayaran pada 2026-07-20 23:15, 2026-07-21 01:15 WIB.",
+          "detail": {
+            "rule": "same_invoice_no",
+            "invoice_no": "INV-2026-0731",
+            "match_count": 2,
+            "total_amount": 50000000.0,
+            "transaction_ids": [
+              220,
+              221
+            ]
+          }
+        },
+        {
+          "code": "vendor_flagged",
+          "points": 30,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "Vendor CV Fiktif Sukses Makmur berstatus 'high_risk' di master data.",
+          "detail": {
+            "vendor_id": 5,
+            "vendor_name": "CV Fiktif Sukses Makmur",
+            "vendor_status": "high_risk",
+            "total_transactions": 2
+          }
+        }
       ],
-      "llm_semantic_adjustment": 15,
-      "adjustment_reason": "Ditemukan bukti manipulasi data (backdated vendor) dan ketidaksesuaian antara profil pengeluaran user dengan histori transaksi normal, memperkuat temuan fraud dari agent sebelumnya.",
-      "final_risk_score": 95,
+      "suppressed_triggers": [
+        {
+          "code": "timing_outside_hours",
+          "points": 20,
+          "reason": "trigger eksklusif dengan poin lebih rendah"
+        }
+      ],
+      "llm_semantic_adjustment": 0,
+      "adjustment_reason": "Tidak ada counter-evidence atau pembenaran bisnis yang valid; seluruh indikator risiko tinggi dari Agent 1 dan Agent 2 terkonfirmasi kuat.",
+      "final_risk_score": 80,
       "risk_level": "Critical Risk",
       "recommendation": "Indikasi fraud fatal. Eskalasi darurat ke Manajer/CFO."
+    }
+  },
+  {
+    "transaction_id": 222,
+    "related_transaction_ids": [
+      222,
+      223,
+      224
+    ],
+    "finding": "Evaluasi akhir terhadap transaksi ID 222 sebesar Rp24.000.000 (serta transaksi terkait ID 223 dan 224) di PT Konsultan Bayangan mengonfirmasi adanya pola pemecahan pembayaran (split payment) di bawah batas persetujuan Rp25.000.000 dengan total mencapai Rp72.000.000 dalam rentang waktu singkat. Selain itu, terdapat anomali kronologis yang fatal di mana transaksi tercatat pada tanggal 2026-06-22, namun vendor baru terdaftar di sistem pada tanggal 2026-08-08. Tidak ditemukan counter-evidence atau pembenaran bisnis yang sah untuk membatalkan indikasi kecurangan ini. Oleh karena itu, skor risiko tetap dipertahankan tinggi tanpa adanya adjustment negatif.",
+    "provenance": {
+      "generated_by": "Agent_3_Final_Review",
+      "tools_used": [
+        "calculate_z_score",
+        "check_transaction_timing",
+        "find_duplicate_expenses",
+        "get_transaction_details",
+        "get_vendor_history",
+        "get_vendor_transaction_history"
+      ],
+      "scored_by": "python_scoring_engine"
+    },
+    "evidence": {
+      "objective": [
+        {
+          "code": "insufficient_baseline",
+          "points": 0,
+          "owner": "agent_1_financial",
+          "amplifier_only": true,
+          "narrative": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar.",
+          "detail": {
+            "scope": "none",
+            "method": "insufficient_baseline",
+            "n_baseline": 4,
+            "median": null,
+            "mad": null,
+            "threshold": 3.5,
+            "computed_value": null,
+            "confidence": "none",
+            "is_anomaly": false,
+            "message": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar."
+          }
+        },
+        {
+          "code": "split_payment",
+          "points": 50,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "3 pembayaran @24,000,000 ke vendor yang sama dalam 7 hari, total 72,000,000. Masing-masing berada tepat di bawah batas persetujuan 25,000,000, sehingga tidak ada satu pun yang memerlukan persetujuan lead padahal totalnya melewati batas tersebut.",
+          "detail": {
+            "rule": "below_approval_threshold",
+            "approval_threshold": 25000000,
+            "band_low": 20000000.0,
+            "window_days": 7,
+            "match_count": 3,
+            "total_amount": 72000000.0,
+            "transaction_ids": [
+              222,
+              223,
+              224
+            ],
+            "invoice_numbers": [
+              "INV-2026-0601",
+              "INV-2026-0602",
+              "INV-2026-0603"
+            ]
+          }
+        },
+        {
+          "code": "role_bypass",
+          "points": 10,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "Pemecahan pembayaran diinput oleh Test Staff yang berperan finance_staff — yaitu pihak yang justru memerlukan persetujuan lead di atas ambang.",
+          "detail": {
+            "user_id": 10,
+            "role": "finance_staff"
+          }
+        }
+      ],
+      "semantic": [
+        {
+          "source": "get_transaction_details",
+          "insight": "Transaksi tercatat sebelum vendor resmi terdaftar (backdating) dan membentuk pola split payment di bawah limit persetujuan."
+        }
+      ]
+    },
+    "agent_results": {
+      "agent1": {
+        "finding": "Transaksi ID 222 sebesar Rp24.000.000 untuk PT Konsultan Bayangan dicatat pada jam kerja normal (Senin, 10:15 WIB). Pengujian Z-Score menunjukkan data baseline tidak mencukupi untuk penilaian statistik yang valid. Vendor tercatat memiliki total 3 transaksi dengan nominal identik masing-masing Rp24.000.000 untuk pembayaran konsultasi bertahap.",
+        "provenance": {
+          "generated_by": "Agent_1_Financial_Analytics",
+          "tools_used": [
+            "get_transaction_details",
+            "calculate_z_score",
+            "get_vendor_transaction_history",
+            "check_transaction_timing"
+          ]
+        },
+        "evidence": {
+          "objective": [
+            {
+              "metric": "z_score",
+              "value": null,
+              "status": "insufficient_baseline"
+            },
+            {
+              "metric": "timing",
+              "value": "10:15:00",
+              "status": "normal"
+            },
+            {
+              "metric": "vendor_history",
+              "value": "3 transactions",
+              "status": "established_vendor"
+            }
+          ]
+        }
+      },
+      "agent2": {
+        "finding": "Investigasi menunjukkan tidak ada transaksi duplikat (split payment) yang terdeteksi untuk nominal 24.000.000 pada vendor PT Konsultan Bayangan. Namun, ditemukan anomali kronologis yang sangat mencurigakan: transaksi dilakukan pada 2026-06-22, sedangkan vendor baru terdaftar di sistem pada 2026-08-08. Hal ini mengindikasikan adanya potensi transaksi fiktif atau manipulasi data (backdating).",
+        "provenance": {
+          "generated_by": "Agent_2_Fraud_Investigator",
+          "tools_used": [
+            "get_transaction_details",
+            "find_duplicate_expenses",
+            "get_vendor_history"
+          ]
+        },
+        "evidence": {
+          "objective": [
+            {
+              "metric": "duplicate_transaction",
+              "value": "0 ditemukan",
+              "status": "aman"
+            },
+            {
+              "metric": "vendor_registration_anomaly",
+              "value": "transaksi mendahului pendaftaran vendor",
+              "status": "sangat mencurigakan"
+            }
+          ]
+        }
+      },
+      "agent3": {
+        "finding": "Evaluasi akhir terhadap transaksi ID 222 sebesar Rp24.000.000 (serta transaksi terkait ID 223 dan 224) di PT Konsultan Bayangan mengonfirmasi adanya pola pemecahan pembayaran (split payment) di bawah batas persetujuan Rp25.000.000 dengan total mencapai Rp72.000.000 dalam rentang waktu singkat. Selain itu, terdapat anomali kronologis yang fatal di mana transaksi tercatat pada tanggal 2026-06-22, namun vendor baru terdaftar di sistem pada tanggal 2026-08-08. Tidak ditemukan counter-evidence atau pembenaran bisnis yang sah untuk membatalkan indikasi kecurangan ini. Oleh karena itu, skor risiko tetap dipertahankan tinggi tanpa adanya adjustment negatif.",
+        "provenance": {
+          "generated_by": "Agent_3_Evidence_Review",
+          "tools_used": [
+            "get_transaction_details"
+          ]
+        },
+        "evidence": {
+          "semantic": [
+            {
+              "source": "get_transaction_details",
+              "insight": "Transaksi tercatat sebelum vendor resmi terdaftar (backdating) dan membentuk pola split payment di bawah limit persetujuan."
+            }
+          ]
+        },
+        "scoring": {
+          "llm_semantic_adjustment": 0,
+          "adjustment_reason": "Tidak ada counter-evidence atau penjelasan bisnis yang sah untuk membantah anomali pendaftaran vendor dan pola split payment."
+        }
+      }
+    },
+    "scoring": {
+      "base_risk_score": 60,
+      "raw_score": 60,
+      "capped": false,
+      "max_base_score": 80,
+      "agent_scores": [
+        {
+          "agent": "agent_1_financial",
+          "score": 0
+        },
+        {
+          "agent": "agent_2_fraud",
+          "score": 60
+        }
+      ],
+      "objective_triggers": [
+        {
+          "code": "insufficient_baseline",
+          "points": 0,
+          "owner": "agent_1_financial",
+          "amplifier_only": true,
+          "narrative": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar.",
+          "detail": {
+            "scope": "none",
+            "method": "insufficient_baseline",
+            "n_baseline": 4,
+            "median": null,
+            "mad": null,
+            "threshold": 3.5,
+            "computed_value": null,
+            "confidence": "none",
+            "is_anomaly": false,
+            "message": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar."
+          }
+        },
+        {
+          "code": "split_payment",
+          "points": 50,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "3 pembayaran @24,000,000 ke vendor yang sama dalam 7 hari, total 72,000,000. Masing-masing berada tepat di bawah batas persetujuan 25,000,000, sehingga tidak ada satu pun yang memerlukan persetujuan lead padahal totalnya melewati batas tersebut.",
+          "detail": {
+            "rule": "below_approval_threshold",
+            "approval_threshold": 25000000,
+            "band_low": 20000000.0,
+            "window_days": 7,
+            "match_count": 3,
+            "total_amount": 72000000.0,
+            "transaction_ids": [
+              222,
+              223,
+              224
+            ],
+            "invoice_numbers": [
+              "INV-2026-0601",
+              "INV-2026-0602",
+              "INV-2026-0603"
+            ]
+          }
+        },
+        {
+          "code": "role_bypass",
+          "points": 10,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "Pemecahan pembayaran diinput oleh Test Staff yang berperan finance_staff — yaitu pihak yang justru memerlukan persetujuan lead di atas ambang.",
+          "detail": {
+            "user_id": 10,
+            "role": "finance_staff"
+          }
+        }
+      ],
+      "suppressed_triggers": [],
+      "llm_semantic_adjustment": 0,
+      "adjustment_reason": "Tidak ada counter-evidence atau penjelasan bisnis yang sah untuk membantah anomali pendaftaran vendor dan pola split payment.",
+      "final_risk_score": 60,
+      "risk_level": "High Risk",
+      "recommendation": "Indikasi kecurangan. Butuh verifikasi manual (Manual Review)."
     }
   }
 ]

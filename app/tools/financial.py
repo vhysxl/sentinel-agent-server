@@ -4,11 +4,13 @@ from app.db.session import SessionLocal
 from app.db.models import Transaction, User, Vendor
 from app.core.config import WIB, WORK_START_HOUR, WORK_END_HOUR
 from app.core.roles import role_of
+from app.engine import statistics
 
 def calculate_z_score(transaction_id: int) -> Dict[str, Any]:
     """
-    Menghitung Z-score dari sebuah transaksi berdasarkan histori pengeluaran vendor/kategori.
-    Berguna untuk mendeteksi anomali atau lonjakan ekstrem.
+    Menghitung modified z-score (median + MAD) sebuah transaksi terhadap riwayat
+    vendor, dengan fallback ke baseline kategori. Berguna untuk mendeteksi
+    lonjakan nominal yang tidak wajar.
     """
     db = SessionLocal()
     try:
@@ -16,35 +18,36 @@ def calculate_z_score(transaction_id: int) -> Dict[str, Any]:
         if not txn:
             return {"error": f"Transaction {transaction_id} not found."}
 
-        stats = db.query(
-            func.avg(Transaction.amount).label('mean'),
-            func.stddev(Transaction.amount).label('stddev')
-        ).filter(
-            Transaction.vendor_id == txn.vendor_id,
-            Transaction.type == 'expense',
-            Transaction.id != transaction_id
-        ).first()
+        # Memakai modul yang sama dengan scoring engine, supaya angka yang
+        # dinarasikan agen identik dengan angka yang menghasilkan skor.
+        vendor_baseline = [float(r[0]) for r in db.execute(text("""
+            SELECT amount FROM transactions
+            WHERE vendor_id = :v AND type = 'expense' AND id <> :i
+        """), {"v": txn.vendor_id, "i": transaction_id})] if txn.vendor_id else []
 
-        if not stats.mean or not stats.stddev:
-             return {
-                 "transaction_id": transaction_id,
-                 "z_score": 0.0,
-                 "status": "insufficient_data",
-                 "message": "Tidak cukup data historis untuk menghitung Z-score."
-             }
-        
-        mean_val = float(stats.mean)
-        stddev_val = float(stats.stddev)
-        amount_val = float(txn.amount)
+        category_baseline = [float(r[0]) for r in db.execute(text("""
+            SELECT amount FROM transactions
+            WHERE category = :c AND type = 'expense' AND id <> :i
+        """), {"c": txn.category, "i": transaction_id})]
 
-        z_score = 0.0 if stddev_val == 0 else (amount_val - mean_val) / stddev_val
-        status = "anomaly" if z_score > 3.0 else "normal"
-        
+        result = statistics.evaluate(float(txn.amount), vendor_baseline, category_baseline)
+
         return {
             "transaction_id": transaction_id,
-            "z_score": round(z_score, 2),
-            "status": status,
-            "message": f"Transaksi ini {round(z_score, 2)} standar deviasi dari rata-rata historis (Rata-rata: {mean_val:,.2f}, Transaksi: {amount_val:,.2f})."
+            "amount": float(txn.amount),
+            "modified_z_score": result.computed_value,
+            "method": result.method,
+            "baseline_scope": result.scope,
+            "n_baseline": result.n_baseline,
+            "median": result.median,
+            "mad": result.mad,
+            "threshold": result.threshold,
+            "confidence": result.confidence,
+            "status": "anomaly" if result.is_anomaly else (
+                "insufficient_data"
+                if result.method == statistics.METHOD_INSUFFICIENT else "normal"
+            ),
+            "message": result.message,
         }
     finally:
         db.close()

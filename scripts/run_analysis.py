@@ -50,10 +50,13 @@ def main():
         print(f"  tx {f['transaction_id']:<5} {s.get('risk_level', '?'):<14} "
               f"base={s.get('base_risk_score')} adj={s.get('llm_semantic_adjustment')} "
               f"final={s.get('final_risk_score')}")
-        for trigger in s.get("objective_triggers", []):
-            print(f"        - {trigger}")
+        for t in s.get("objective_triggers", []):
+            tag = " [amplifier]" if t.get("amplifier_only") else ""
+            print(f"        +{t['points']:<3} {t['code']:<22}{tag}")
+            print(f"             {t['narrative'][:120]}")
         if s.get("adjustment_reason"):
-            print(f"        alasan A3: {s['adjustment_reason'][:150]}")
+            print(f"        A3 ({s.get('llm_semantic_adjustment'):+d}): "
+                  f"{s['adjustment_reason'][:130]}")
 
     out = "scripts/last_run.json"
     with open(out, "w", encoding="utf-8") as fh:
