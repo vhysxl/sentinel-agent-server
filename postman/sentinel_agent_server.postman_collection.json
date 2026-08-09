@@ -1,0 +1,219 @@
+{
+  "info": {
+    "name": "Sentinel Agent Server",
+    "description": "API mesin audit Sentinel (FastAPI, port 8000). Terpisah dari sentinel-backend (Express, port 5000) — keduanya berbagi database yang sama.\n\nKEPEMILIKAN TABEL\n  users, vendors, transactions   milik sentinel-backend (Drizzle)\n  findings, transaction_analysis milik agent server (migrate.py)\nAgent server TIDAK PERNAH menulis ke tabel milik backend.\n\nDUA JALUR YANG PERLU DIINTEGRASIKAN NEXT.JS\n  TULIS  POST /api/transactions/{id}/analyze — panggil setelah transaksi tersimpan.\n         Fire-and-forget: balasan kembali sebelum analisis dimulai.\n  BACA   GET /api/summary dan GET /api/findings untuk halaman Analytics.\n         Instan, tanpa LLM.\n\nBIAYA\n  Deteksi ~80 ms per transaksi, deterministik, tanpa kuota.\n  LLM hanya menyala untuk kandidat (~10% transaksi).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8000", "type": "string" },
+    { "key": "transactionId", "value": "1", "type": "string" },
+    { "key": "findingId", "value": "1", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/", "host": ["{{baseUrl}}"], "path": [""] },
+        "description": "Memastikan agent server hidup."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('200', () => pm.response.to.have.status(200));"]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Analisis",
+      "description": "Jalur TULIS. Dipanggil aplikasi setelah transaksi masuk.",
+      "item": [
+        {
+          "name": "Analisis satu transaksi (fire-and-forget)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions/{{transactionId}}/analyze",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "transactions", "{{transactionId}}", "analyze"]
+            },
+            "description": "PANGGIL INI SETELAH TRANSAKSI TERSIMPAN.\n\nBalasan 202 kembali SEBELUM analisis berjalan — pengguna yang menyimpan transaksi tidak boleh menunggu 15 detik. Jangan menunggu hasilnya di sini; temuannya muncul lewat GET /api/findings.\n\nAlurnya di dalam:\n  1. detektor Python berjalan (~80 ms)\n  2. bukan kandidat -> selesai, dicatat 'clean', LLM tidak disentuh\n  3. kandidat       -> 3 agen LLM (~15 detik), temuan dibuat\n  4. kalau pelanggaran yang sama sudah dilaporkan, temuan lama DIPERBARUI tanpa memanggil LLM lagi\n\nAman dipanggil ulang: satu transaksi hanya menghasilkan satu temuan."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 diterima', () => pm.response.to.have.status(202));",
+                  "pm.test('tidak memblokir', () => pm.expect(pm.response.responseTime).to.be.below(1000));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Backfill rentang tanggal (SSE)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start_date\": \"2026-01-01\",\n  \"end_date\": \"2026-12-31\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/analyze",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "analyze"]
+            },
+            "description": "Memeriksa seluruh transaksi dalam rentang, satu per satu, dengan progres Server-Sent Events.\n\nUntuk seeding dan demo — BUKAN jalur normal. Ia memanggil fungsi yang sama dengan jalur otomatis, supaya keduanya tidak bisa memberi hasil berbeda.\n\nPostman menampilkan SSE sebagai teks mentah; itu wajar. Rentangnya disaring atas tanggal WIB dan ujungnya inklusif."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Temuan",
+      "description": "Jalur BACA. Halaman Analytics memakai ini.",
+      "item": [
+        {
+          "name": "Ringkasan (baris pertama halaman)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "summary"]
+            },
+            "description": "Angka yang pertama dilihat orang keuangan saat membuka tab Analytics.\n\n  perlu_tindakan   temuan Critical yang belum ditangani\n  perlu_ditinjau   High + Medium yang belum ditangani\n  aman             transaksi yang SUDAH diperiksa dan bersih\n  gagal            pemeriksaannya error\n  belum_diperiksa  belum pernah dianalisis\n\n'aman' berbeda dari 'belum_diperiksa' dengan sengaja: bagi alat audit, sudah-diperiksa-dan-bersih tidak boleh terlihat sama dengan tidak-pernah-dilihat."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('punya hitungan', () => pm.expect(pm.response.json()).to.have.property('aman'));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Daftar temuan terbuka",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/findings?status=open&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "findings"],
+              "query": [
+                { "key": "status", "value": "open", "description": "open | resolved | all" },
+                { "key": "limit", "value": "50" },
+                { "key": "risk_level", "value": "critical", "disabled": true, "description": "critical | high | medium | low" }
+              ]
+            },
+            "description": "Antrean kerja, diurut dari yang paling perlu ditindak.\n\nField yang berguna untuk UI:\n  risk_level          kode: critical | high | medium | low\n  risk_label          label Indonesia siap tampil: Kritis | Tinggi | Sedang | Rendah\n  recommended_action  kalimat tindakan\n  description         narasi yang dibaca lebih dulu\n  narrative_stale     true kalau grup bertambah setelah narasi dibuat —\n                      angkanya sudah diperbarui, kalimatnya belum\n\nrisk_level menyimpan KODE, bukan teks tampilan. Labelnya urusan UI."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const a = pm.response.json();",
+                  "pm.test('array', () => pm.expect(a).to.be.an('array'));",
+                  "if (a.length) pm.collectionVariables.set('findingId', a[0].id);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Detail temuan + bukti",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/findings/{{findingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "findings", "{{findingId}}"]
+            },
+            "description": "Isi tombol 'Lihat bukti'.\n\n  evidence  DARI PYTHON — trigger, median, MAD, ambang, n_baseline, poin tiap\n            trigger. Tetap sah walau LLM gagal.\n  analysis  DARI LLM — narasi 3 agen, verdict, penyesuaian ±20.\n            NULL kalau LLM gagal; temuannya tetap valid.\n\nPemisahan ini yang membuat setiap angka pada skor dapat ditelusuri ke satu fungsi Python, bukan ke kalimat model."
+          },
+          "response": []
+        },
+        {
+          "name": "Tutup temuan",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resolution\": \"justified\",\n  \"note\": \"Sudah dikonfirmasi ke vendor, ada kontrak pendukung.\",\n  \"resolved_by\": 8\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/findings/{{findingId}}/resolve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "findings", "{{findingId}}", "resolve"]
+            },
+            "description": "Menutup temuan dengan ALASAN, bukan sekadar centang.\n\n  justified        ada penjelasan bisnis yang sah\n  false_positive   deteksinya keliru\n  confirmed_fraud  terbukti, sudah ditindak\n  escalated        dilaporkan ke atasan\n\nAlasannya wajib karena bernilai: kalau lead menutup sepuluh temuan z-score berturut-turut sebagai 'justified', itu sinyal ambangnya kekencangan. Boolean tidak memberi informasi itu.\n\nresolved_by diisi users.id dari sesi login.\nNilai resolution di luar keempat itu ditolak."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Ask Sentinel",
+      "item": [
+        {
+          "name": "Tanya keuangan",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"summary keuangan Juni 2026\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ask",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ask"]
+            },
+            "description": "Tanya jawab bebas atas data keuangan. Sekali tanya, sekali jawab — tanpa riwayat percakapan.\n\nModel TIDAK PERNAH melihat baris transaksi. Ia memilih tool + periode, Python menjalankannya, lalu model menarasikan angka yang sudah jadi. `figures` dirakit Python dari hasil query, jadi angka karangan tidak bisa masuk ke sana.\n\nKarena Postgres yang mengagregasi, setahun selalu <= 12 baris — entah di baliknya 68 transaksi atau 500.000.\n\nFORMAT PERIODE yang dikenali (selain ini DITOLAK, bukan ditebak):\n  2023   2023-09   2023-Q3   2023-09-01..2023-09-15\n\nContoh pertanyaan:\n  summary keuangan Juni 2026\n  gimana performa keuntungan tahun 2026\n  pengeluaran terbesar bulan ini\n  ada temuan apa bulan Juli\n\nPERIKSA `unsourced_figures`: kalau tidak kosong, ada angka di jawaban yang tidak berasal dari hasil query — jangan ditampilkan sebagai fakta."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('tiap angka punya sumber', () => pm.expect(r.unsourced_figures || []).to.be.empty);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    }
+  ]
+}
