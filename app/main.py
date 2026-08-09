@@ -66,11 +66,24 @@ def extract_candidates(db, start_date: str, end_date: str) -> dict[int, list]:
 
     Skala target proyek ini ratusan transaksi (SCOPE 1.2), bukan jutaan.
     """
-    rows = db.query(Transaction).filter(
-        Transaction.type == "expense",
-        Transaction.transaction_date >= start_date,
-        Transaction.transaction_date <= end_date,
-    ).order_by(Transaction.id).all()
+    # Rentang dibandingkan sebagai TANGGAL WIB, dan end_date bersifat INKLUSIF.
+    #
+    # Perbandingan langsung `transaction_date <= :end_date` salah dua kali:
+    # (1) string tanggal dikonversi menjadi 00:00:00, sehingga rentang
+    #     "12 Juni sampai 12 Juni" membuang transaksi pukul 14:20 pada hari itu
+    #     dan mengembalikan nol temuan;
+    # (2) konversinya memakai timezone sesi (GMT di server ini), bukan WIB,
+    #     sehingga batas harinya bergeser 7 jam.
+    ids = [r[0] for r in db.execute(text("""
+        SELECT id FROM transactions
+        WHERE type = 'expense'
+          AND (transaction_date AT TIME ZONE 'Asia/Jakarta')::date
+              BETWEEN CAST(:start_date AS DATE) AND CAST(:end_date AS DATE)
+        ORDER BY id
+    """), {"start_date": start_date, "end_date": end_date})]
+
+    rows = (db.query(Transaction).filter(Transaction.id.in_(ids))
+            .order_by(Transaction.id).all()) if ids else []
 
     candidates: dict[int, list] = {}
     for txn in rows:
@@ -272,6 +285,16 @@ async def run_analysis(request: AnalyzeRequest):
                         "related_transaction_ids": related,
                         "finding": (json_a3.get("finding")
                                     or _fallback_narrative(base_scoring)),
+                        # Putusan kedua detektif disimpan apa adanya, termasuk
+                        # ketika Agent 3 menolaknya. Auditor harus bisa melihat
+                        # di mana ketiganya berbeda pendapat.
+                        "investigation": {
+                            "agent1_verdict": json_a1.get("verdict"),
+                            "agent1_confidence": json_a1.get("confidence"),
+                            "agent2_verdict": json_a2.get("verdict"),
+                            "agent2_confidence": json_a2.get("confidence"),
+                            "verdict_review": json_a3.get("verdict_review", {}),
+                        },
                         "provenance": {
                             "generated_by": "Agent_3_Final_Review",
                             "tools_used": tools_used,

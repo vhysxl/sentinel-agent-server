@@ -1,33 +1,33 @@
 """
 Agent 2 — Detektif Pola Fraud.
 
-PERANNYA: menyelidiki pola. Ia menerima pelanggaran yang sudah dipastikan Python
-(duplikasi faktur, split payment, status vendor), lalu mencari konteks perilaku
-di sekitarnya — siapa yang menginput, apakah ini kebiasaan atau kejadian tunggal.
+PERANNYA: memeriksa kandidat secara mendalam dari sisi pola dan perilaku, lalu
+MEMILAH — mana pelanggaran yang punya penjelasan sah, mana yang benar berisiko.
 
-Tool deteksinya dicabut karena alasan konkret, bukan teoretis:
-`find_duplicate_expenses` hanya mencari nominal identik dalam 24 jam, sehingga
-untuk kasus split payment berjarak 2 hari ia SELALU mengembalikan "0 ditemukan".
-Pada run sebelumnya Agent 2 karena itu menulis status "aman" pada temuan yang
-diberi skor 60 High Risk. Toolset-nya lebih miskin daripada detektor Python,
-jadi memakainya hanya menghasilkan bantahan yang keliru.
+BATAS: `verdict`-nya usulan, bukan skor. Hanya Agent 3 yang menggeser angka.
 
-Ia TIDAK mempengaruhi skor.
+Yang TIDAK diberikan: `find_duplicate_expenses` dan `get_vendor_history`.
+Alasannya konkret, bukan teoretis: `find_duplicate_expenses` hanya mencocokkan
+nominal identik dalam 24 jam, sehingga untuk split payment berjarak 2 hari ia
+selalu mengembalikan "0 ditemukan" — dan pada run sebelumnya Agent 2 karena itu
+menulis status "aman" pada temuan berskor 60 High Risk. Tool-nya lebih miskin
+daripada detektor Python yang hasilnya sudah ada di dalam prompt.
 """
 import json
 
 from app.agents.llm import run_agent
 from app.tools.financial import (
+    get_monthly_expense_trend,
+    get_sales_trend,
     get_user_spending_pattern,
     get_vendor_transaction_history,
 )
 
-# Tool KONTEKS saja: siapa orangnya, seperti apa vendornya.
-# Tidak ada find_duplicate_expenses / get_vendor_history — keduanya sudah
-# dijalankan Python dengan definisi yang lebih lengkap.
-CONTEXT_TOOLS = [
+EVIDENCE_TOOLS = [
     get_vendor_transaction_history,
     get_user_spending_pattern,
+    get_monthly_expense_trend,
+    get_sales_trend,
 ]
 
 
@@ -35,57 +35,70 @@ def run_fraud_investigator(transaction_id: int, facts: dict | None = None):
     facts = facts or {}
     transaction = facts.get("transaction", {})
     triggers = facts.get("triggers", [])
+    month = str(transaction.get("transaction_date", ""))[:7]
 
     findings_block = json.dumps(triggers, indent=2, ensure_ascii=False, default=str) \
-        if triggers else "(tidak ada pola fraud yang terdeteksi pada transaksi ini)"
+        if triggers else "(tidak ada pola fraud terdeteksi pada kandidat ini)"
 
     prompt = f"""
 Kamu adalah Agent 2: Detektif Pola Fraud.
 
-Transaksi yang diselidiki (ID {transaction_id}):
+KANDIDAT yang harus kamu periksa (ID {transaction_id}):
 {json.dumps(transaction, indent=2, ensure_ascii=False, default=str)}
+Bulan transaksi: {month}
 
-POLA YANG SUDAH DIPASTIKAN oleh detektor Python. Ini hasil query, bukan dugaan:
+POLA YANG SUDAH DIPASTIKAN detektor Python. Ini hasil query, bukan dugaan:
 {findings_block}
 
-ATURAN KERAS:
-- JANGAN membantah pola di atas dan jangan menyatakan "aman" atas transaksi yang
-  sudah punya pola. Kalau daftarnya berisi sesuatu, berarti ada yang ditemukan.
-- JANGAN mengarang jenis pelanggaran baru.
-- Bedakan dengan tegas, jangan pernah tertukar:
-    * `duplicate_confirmed`  = faktur yang SAMA dibayar dua kali. Uang keluar
-      dua kali untuk satu kewajiban. Ini BUKAN split payment.
-    * `duplicate_suspected`  = dugaan, karena nomor faktur tidak diisi. Wajib
-      memakai kata "indikasi", bukan "terdeteksi".
-    * `split_payment`        = faktur BERBEDA, sengaja dipecah agar masing-masing
-      lolos ambang persetujuan. Tidak ada pembayaran ganda di sini; yang
-      dilanggar adalah kontrol persetujuan. Sebutkan nilai ambangnya.
-- Kalau daftarnya kosong, katakan tidak ada pola fraud yang terdeteksi.
+TUGASMU: memeriksa apakah pola ini punya penjelasan sah, atau benar-benar berisiko.
 
-Tugasmu sebagai detektif:
-1. Jelaskan pelanggarannya dalam bahasa yang dimengerti orang keuangan, dan
-   sebutkan APA yang dilanggar (uang ganda? atau kontrol persetujuan?).
-2. Gunakan tool konteks untuk melihat latar perilakunya:
+LANGKAH:
+1. Pahami pelanggarannya, dan bedakan dengan tegas — jangan pernah tertukar:
+   * `duplicate_confirmed` = faktur SAMA dibayar dua kali. Uang keluar dua kali
+     untuk satu kewajiban. Ini BUKAN split payment.
+   * `duplicate_suspected` = dugaan, karena nomor faktur kosong. Pakai kata
+     "indikasi", bukan "terdeteksi".
+   * `split_payment` = faktur BERBEDA, dipecah agar masing-masing lolos ambang
+     persetujuan. Tidak ada pembayaran ganda; yang dilanggar kontrol persetujuan.
+     Sebutkan nilai ambangnya.
+2. Cari bukti perilaku dengan tool sebelum menyimpulkan:
    - `get_user_spending_pattern` — apakah penginput ini biasa bertransaksi
-     sebesar ini, atau ini menyimpang dari kebiasaannya?
-   - `get_vendor_transaction_history` — apakah vendor ini punya rekam jejak?
-3. Laporkan juga kalau konteksnya justru meringankan.
+     sebesar ini, atau menyimpang dari kebiasaannya sendiri?
+   - `get_vendor_transaction_history` — vendor ini punya rekam jejak, atau baru muncul?
+   - `get_sales_trend("{month}")` / `get_monthly_expense_trend` — adakah konteks
+     bisnis yang menjelaskan lonjakan aktivitas ke vendor ini?
+3. Putuskan `verdict`:
+   - "explainable" — ada penjelasan sah yang DIDUKUNG ANGKA. Contoh sah:
+     kontrak bertahap yang memang dijadwalkan, atau pembayaran berulang rutin.
+     WAJIB menyebut angkanya.
+   - "risk"        — tidak ada penjelasan, atau justru diperkuat oleh perilaku
+     penginput/vendor.
+   - "uncertain"   — bukti tidak cukup.
+
+ATURAN KERAS:
+- JANGAN membantah pola di atas, dan JANGAN menyatakan "aman" atas kandidat yang
+  sudah punya pola. Kalau daftarnya berisi sesuatu, berarti ada yang ditemukan.
+  Yang boleh kamu simpulkan adalah apakah pola itu PUNYA PENJELASAN.
+- JANGAN mengarang jenis pelanggaran baru.
+- Verdict-mu usulan untuk Agent 3, bukan keputusan akhir.
 
 Balas HANYA JSON valid tanpa markdown:
 {{
+  "verdict": "explainable | risk | uncertain",
+  "confidence": "low | medium | high",
   "finding": "Narasi bahasa Indonesia. Sebutkan nomor faktur / nilai ambang bila relevan.",
   "provenance": {{
       "generated_by": "Agent_2_Fraud_Investigator",
-      "tools_used": ["tool konteks yang benar-benar kamu panggil"]
+      "tools_used": ["tool yang benar-benar kamu panggil"]
   }},
   "evidence": {{
       "context": [
-          {{"source": "nama_tool", "insight": "apa yang kamu temukan dari tool itu"}}
+          {{"source": "nama_tool", "insight": "temuan berikut angkanya"}}
       ]
   }}
 }}
 """
 
-    response = run_agent(label="Agent 2", prompt=prompt, tools=CONTEXT_TOOLS)
+    response = run_agent(label="Agent 2", prompt=prompt, tools=EVIDENCE_TOOLS)
     print(f"\n[Agent 2] Selesai (model {response.model}).")
     return response
