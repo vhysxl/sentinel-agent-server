@@ -30,6 +30,7 @@ from app.core.config import (
     WORK_END_HOUR,
     WORK_START_HOUR,
 )
+from app.core.format import kelipatan, ringkas, rupiah, tanggal
 from app.core.roles import FINANCE_STAFF, role_of
 from app.engine import statistics as stats
 
@@ -98,10 +99,15 @@ def detect_amount_anomaly(db, txn) -> Optional[Trigger]:
     # insufficient_baseline diterbitkan sebagai trigger 0 poin, bukan didiamkan:
     # temuan harus bisa membedakan "diperiksa dan bersih" dari "tak terperiksa".
     if result.method == stats.METHOD_INSUFFICIENT:
+        n = max(len(vendor_baseline), len(category_baseline))
         return Trigger(
             code="insufficient_baseline", points=0, owner=AGENT_1,
-            narrative=result.message, detail=result.to_dict(),
-            amplifier_only=True,
+            narrative=(
+                f"Belum ada cukup riwayat untuk membandingkan nilai ini — hanya "
+                f"{n} transaksi sejenis yang tercatat sebelumnya. Artinya kewajaran "
+                f"nominalnya belum bisa dinilai, bukan berarti sudah aman."
+            ),
+            detail=result.to_dict(), amplifier_only=True,
         )
 
     if not result.is_anomaly:
@@ -109,9 +115,19 @@ def detect_amount_anomaly(db, txn) -> Optional[Trigger]:
 
     z = result.computed_value
     points = _z_points(z) if z is not None else 20
+    amount = float(txn.amount)
+    acuan = "vendor ini" if result.scope == "vendor" else f"kategori {txn.category}"
+    lipat = kelipatan(amount, result.median) if result.median else ""
+
     return Trigger(
         code="z_score_anomaly", points=points, owner=AGENT_1,
-        narrative=result.message, detail=result.to_dict(),
+        narrative=(
+            f"Nilai {rupiah(amount)} jauh di atas kebiasaan {acuan}, yang biasanya "
+            f"sekitar {ringkas(result.median)} per transaksi "
+            f"(dari {result.n_baseline} transaksi sebelumnya)"
+            + (f" — {lipat}." if lipat else ".")
+        ),
+        detail=result.to_dict(),
     )
 
 
@@ -136,9 +152,8 @@ def detect_timing(db, txn) -> Optional[Trigger]:
     return Trigger(
         code="timing_outside_hours", points=20, owner=AGENT_1, amplifier_only=True,
         narrative=(
-            f"Transaksi dicatat ke sistem pada {local.strftime('%A %d-%m-%Y %H:%M')} "
-            f"WIB, di luar jam kerja (Senin-Jumat "
-            f"{WORK_START_HOUR:02d}:00-{WORK_END_HOUR - 1:02d}:59)."
+            f"Tercatat {tanggal(local)} WIB — di luar jam kerja "
+            f"(Senin-Jumat {WORK_START_HOUR:02d}:00-{WORK_END_HOUR - 1:02d}:59)."
         ),
         detail={
             "evaluated_field": "created_at",
@@ -190,8 +205,9 @@ def detect_duplicate(db, txn) -> Optional[Trigger]:
                 code="duplicate_confirmed", points=50, owner=AGENT_2,
                 narrative=(
                     f"Faktur {txn.invoice_no} dibayar {len(rows)} kali ke vendor yang "
-                    f"sama (total {total:,.0f}). Pembayaran pada "
-                    f"{', '.join(r[2] for r in rows)} WIB."
+                    f"sama. Total yang keluar {rupiah(total)} untuk satu tagihan, "
+                    f"sehingga ada {rupiah(total - float(txn.amount))} berpotensi "
+                    f"kelebihan bayar. Pembayaran pada {', '.join(r[2] for r in rows)} WIB."
                 ),
                 detail={
                     "rule": "same_invoice_no",
@@ -222,9 +238,9 @@ def detect_duplicate(db, txn) -> Optional[Trigger]:
             code="duplicate_suspected", points=30, owner=AGENT_2,
             narrative=(
                 f"Indikasi pembayaran ganda: {len(rows)} transaksi bernominal sama "
-                f"({float(txn.amount):,.0f}) ke vendor yang sama dalam 24 jam, "
-                f"pada {', '.join(r[1] for r in rows)} WIB. Nomor faktur tidak "
-                f"diisi, sehingga ini dugaan — bukan kepastian."
+                f"({rupiah(txn.amount)}) ke vendor yang sama dalam 24 jam, pada "
+                f"{', '.join(r[1] for r in rows)} WIB. Nomor fakturnya tidak diisi, "
+                f"jadi ini baru dugaan — perlu dicek ke bukti tagihannya."
             ),
             detail={
                 "rule": "same_vendor_amount_24h",
@@ -282,11 +298,11 @@ def detect_split_payment(db, txn) -> Optional[Trigger]:
     return Trigger(
         code="split_payment", points=50, owner=AGENT_2,
         narrative=(
-            f"{len(rows)} pembayaran @{amount:,.0f} ke vendor yang sama dalam "
-            f"{SPLIT_WINDOW_DAYS} hari, total {total:,.0f}. Masing-masing berada "
-            f"tepat di bawah batas persetujuan {APPROVAL_THRESHOLD:,.0f}, "
-            f"sehingga tidak ada satu pun yang memerlukan persetujuan lead "
-            f"padahal totalnya melewati batas tersebut."
+            f"{len(rows)} pembayaran masing-masing {rupiah(amount)} ke vendor yang "
+            f"sama dalam {SPLIT_WINDOW_DAYS} hari, total {rupiah(total)}. Setiap "
+            f"pembayaran berhenti tepat di bawah batas persetujuan "
+            f"{rupiah(APPROVAL_THRESHOLD)}, jadi tidak ada satu pun yang perlu "
+            f"disetujui atasan — padahal totalnya jauh melewati batas itu."
         ),
         detail={
             "rule": "below_approval_threshold",
@@ -325,9 +341,8 @@ def detect_role_bypass(db, txn, has_split: bool) -> Optional[Trigger]:
     return Trigger(
         code="role_bypass", points=10, owner=AGENT_2,
         narrative=(
-            f"Pemecahan pembayaran diinput oleh {row[0]} yang berperan "
-            f"{FINANCE_STAFF} — yaitu pihak yang justru memerlukan persetujuan "
-            f"lead di atas ambang."
+            f"Pemecahan ini dilakukan oleh {row[0]}, staf keuangan — yaitu pihak "
+            f"yang justru wajib meminta persetujuan atasan untuk nominal sebesar itu."
         ),
         detail={"user_id": txn.input_by_user_id, "role": role},
     )
@@ -358,7 +373,8 @@ def detect_vendor_risk(db, txn) -> Optional[Trigger]:
     if status in RISKY_VENDOR_STATUSES:
         return Trigger(
             code="vendor_flagged", points=30, owner=AGENT_2,
-            narrative=f"Vendor {name} berstatus '{status}' di master data.",
+            narrative=(f"Vendor {name} sudah ditandai berisiko ('{status}') "
+                       f"di data master vendor."),
             detail={"vendor_id": txn.vendor_id, "vendor_name": name,
                     "vendor_status": status, "total_transactions": total},
         )
@@ -367,8 +383,8 @@ def detect_vendor_risk(db, txn) -> Optional[Trigger]:
         return Trigger(
             code="vendor_new", points=20, owner=AGENT_2,
             narrative=(
-                f"Vendor {name} baru memiliki {total} transaksi, belum cukup "
-                f"membentuk rekam jejak."
+                f"Vendor {name} baru {total} kali bertransaksi, jadi belum punya "
+                f"rekam jejak yang bisa dijadikan pegangan."
             ),
             detail={"vendor_id": txn.vendor_id, "vendor_name": name,
                     "vendor_status": status, "total_transactions": total},

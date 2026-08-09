@@ -1,20 +1,20 @@
 [
   {
-    "transaction_id": 640,
+    "transaction_id": 706,
     "related_transaction_ids": [
-      640,
-      641
+      706,
+      707
     ],
-    "finding": "Transaksi ID 640 terbukti merupakan pembayaran ganda (duplicate payment) atas faktur INV-2026-0815 dengan total nilai Rp20.000.000,00. Meskipun secara nominal transaksi tunggal Rp10.000.000,00 terlihat wajar dibandingkan rata-rata kategori, fakta objektif mengenai duplikasi faktur dan waktu input di luar jam kerja mengindikasikan adanya risiko operasional atau fraud. Disarankan untuk melakukan pembatalan transaksi ganda dan audit internal terhadap user Yogi Ferdiansyah.",
+    "finding": "Telah ditemukan indikasi penyimpangan serius pada transaksi ID 706 senilai Rp25.000.000. Investigasi kami mengonfirmasi adanya pembayaran ganda untuk faktur yang sama (INV-2026-0731), sehingga total dana yang keluar mencapai Rp50.000.000. Transaksi ini dilakukan oleh staf keuangan di luar jam kerja operasional kepada vendor yang terdaftar dengan status risiko tinggi. Mengingat pendapatan perusahaan pada Juli 2026 sebesar Rp1.181.440.000, pengeluaran ganda ini tidak memiliki dasar bisnis yang sah dan berpotensi merugikan perusahaan. Kami merekomendasikan pembatalan transaksi, peninjauan ulang terhadap vendor tersebut, serta audit internal terhadap prosedur input data oleh staf terkait.",
     "investigation": {
-      "agent1_verdict": "explainable",
+      "agent1_verdict": "risk",
       "agent1_confidence": "high",
       "agent2_verdict": "risk",
       "agent2_confidence": "high",
       "verdict_review": {
-        "agent1": "rejected",
+        "agent1": "agreed",
         "agent2": "agreed",
-        "reason": "Agent 1 mengabaikan fakta objektif mengenai duplikasi faktur yang telah dikonfirmasi oleh sistem. Agent 2 memberikan penilaian yang lebih akurat dengan mempertimbangkan bukti duplikasi dan pola perilaku user."
+        "reason": "Kedua detektif memberikan temuan yang konsisten dengan data objektif. Keduanya menggunakan angka pendapatan yang tepat sesuai konteks (Rp1.181.440.000) dan mengidentifikasi masalah utama yaitu pembayaran ganda serta risiko vendor."
       }
     },
     "provenance": {
@@ -32,17 +32,36 @@
     "evidence": {
       "objective": [
         {
+          "code": "insufficient_baseline",
+          "points": 0,
+          "owner": "agent_1_financial",
+          "amplifier_only": true,
+          "narrative": "Belum ada cukup riwayat untuk membandingkan nilai ini — hanya 4 transaksi sejenis yang tercatat sebelumnya. Artinya kewajaran nominalnya belum bisa dinilai, bukan berarti sudah aman.",
+          "detail": {
+            "scope": "none",
+            "method": "insufficient_baseline",
+            "n_baseline": 4,
+            "median": null,
+            "mad": null,
+            "threshold": 3.5,
+            "computed_value": null,
+            "confidence": "none",
+            "is_anomaly": false,
+            "message": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar."
+          }
+        },
+        {
           "code": "timing_outside_hours",
           "points": 20,
           "owner": "agent_1_financial",
           "amplifier_only": true,
-          "narrative": "Transaksi dicatat ke sistem pada Wednesday 22-07-2026 02:30 WIB, di luar jam kerja (Senin-Jumat 08:00-17:59).",
+          "narrative": "Tercatat Senin, 20 Juli 2026 pukul 23:15 WIB — di luar jam kerja (Senin-Jumat 08:00-17:59).",
           "detail": {
             "evaluated_field": "created_at",
             "reason": "waktu pencatatan ditulis server, tidak dapat diubah dari form",
-            "recorded_at_wib": "2026-07-22 02:30:00",
-            "time_wib": "02:30:00",
-            "weekday": "Wednesday",
+            "recorded_at_wib": "2026-07-20 23:15:00",
+            "time_wib": "23:15:00",
+            "weekday": "Monday",
             "timezone": "Asia/Jakarta",
             "work_hours": "08:00-17:59"
           }
@@ -52,61 +71,70 @@
           "points": 50,
           "owner": "agent_2_fraud",
           "amplifier_only": false,
-          "narrative": "Faktur INV-2026-0815 dibayar 2 kali ke vendor yang sama (total 20,000,000). Pembayaran pada 2026-07-22 10:00, 2026-07-22 10:00 WIB.",
+          "narrative": "Faktur INV-2026-0731 dibayar 2 kali ke vendor yang sama. Total yang keluar Rp50.000.000 untuk satu tagihan, sehingga ada Rp25.000.000 berpotensi kelebihan bayar. Pembayaran pada 2026-07-20 23:15, 2026-07-21 01:15 WIB.",
           "detail": {
             "rule": "same_invoice_no",
-            "invoice_no": "INV-2026-0815",
+            "invoice_no": "INV-2026-0731",
             "match_count": 2,
-            "total_amount": 20000000.0,
+            "total_amount": 50000000.0,
             "transaction_ids": [
-              640,
-              641
+              706,
+              707
             ]
+          }
+        },
+        {
+          "code": "vendor_flagged",
+          "points": 30,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "Vendor CV Fiktif Sukses Makmur sudah ditandai berisiko ('high_risk') di data master vendor.",
+          "detail": {
+            "vendor_id": 5,
+            "vendor_name": "CV Fiktif Sukses Makmur",
+            "vendor_status": "high_risk",
+            "total_transactions": 2
           }
         }
       ],
       "context": [
         {
-          "source": "compare_category_baseline",
-          "insight": "Nominal Rp10.000.000,00 sangat dekat dengan rata-rata kategori Logistics (Rp9.926.858,40) dengan z-score 0,14."
+          "source": "get_vendor_transaction_history",
+          "insight": "Vendor hanya memiliki riwayat transaksi yang sangat terbatas, sehingga tidak ada data historis untuk memverifikasi kewajaran nominal Rp25.000.000."
         },
         {
           "source": "get_monthly_expense_trend",
-          "insight": "Tren pengeluaran perusahaan stabil dengan total expense bulanan di kisaran Rp39,7 juta pada Juli 2026."
+          "insight": "Transaksi ini tidak mencerminkan tren kenaikan biaya operasional yang sistematis, melainkan muncul sebagai pengeluaran tunggal yang tidak terduga."
         },
         {
-          "source": "get_vendor_transaction_history",
-          "insight": "PT Mitra Logistik Nusantara adalah vendor rutin dengan rata-rata transaksi Rp9.930.921,82 dan total 18 transaksi."
+          "source": "compare_category_baseline",
+          "insight": "Kategori konsultasi memiliki data pembanding yang terlalu sedikit untuk memberikan justifikasi statistik atas nominal transaksi ini."
         },
         {
           "source": "get_user_spending_pattern",
-          "insight": "User Yogi Ferdiansyah (ID 9) memiliki pola transaksi yang tidak konsisten, di mana transaksi 10.000.000 ini jauh melampaui rata-rata input harian yang biasanya di bawah 5.000.000."
+          "insight": "User 'testingraihan' melakukan input transaksi ganda untuk vendor yang sama dalam waktu singkat, yang tidak lazim untuk prosedur pembayaran konsultasi."
         },
         {
           "source": "get_vendor_transaction_history",
-          "insight": "Vendor PT Mitra Logistik Nusantara (ID 7) memiliki riwayat transaksi yang stabil, sehingga duplikasi faktur INV-2026-0815 merupakan anomali yang tidak sesuai dengan pola penagihan vendor sebelumnya."
+          "insight": "Vendor hanya memiliki 2 transaksi dalam riwayatnya, keduanya merupakan bagian dari pembayaran ganda ini, menunjukkan vendor baru yang langsung terlibat dalam transaksi mencurigakan."
         },
         {
           "source": "get_monthly_expense_trend",
-          "insight": "Tren pengeluaran bulanan tidak menunjukkan lonjakan aktivitas logistik yang signifikan pada Juli 2026 yang dapat menjustifikasi pembayaran ganda tersebut."
+          "insight": "Tidak ditemukan tren biaya konsultasi yang mendukung kebutuhan pembayaran ganda sebesar Rp50.000.000 di bulan Juli 2026."
         }
       ],
       "semantic": [
         {
           "source": "revenue_context",
-          "insight": "Tabel monthly_revenue kosong; tren revenue tidak dapat diverifikasi."
-        },
-        {
-          "source": "duplicate_confirmed",
-          "insight": "Faktur INV-2026-0815 terkonfirmasi dibayar dua kali dengan total Rp20.000.000,00."
+          "insight": "Pendapatan perusahaan pada Juli 2026 tercatat sebesar Rp1.181.440.000, yang mengonfirmasi bahwa transaksi ganda ini tidak proporsional."
         }
       ]
     },
     "agent_results": {
       "agent1": {
-        "verdict": "explainable",
+        "verdict": "risk",
         "confidence": "high",
-        "finding": "Transaksi sebesar Rp10.000.000,00 untuk PT Mitra Logistik Nusantara dikategorikan wajar. Nominal transaksi berada dalam rentang baseline kategori Logistics (mean: Rp9.926.858,40; z-score: 0,14). Tren pengeluaran perusahaan secara keseluruhan stabil (growth: 2,26%). Meskipun terdapat catatan waktu input di luar jam kerja, vendor ini merupakan mitra rutin dengan histori transaksi yang konsisten (mean: Rp9.930.921,82) dan aktivitas serupa sering dilakukan dalam periode tutup buku.",
+        "finding": "Transaksi sebesar Rp25.000.000 kepada 'CV Fiktif Sukses Makmur' menunjukkan indikasi risiko tinggi. Pertama, vendor ini memiliki status risiko tinggi dan riwayat transaksi yang sangat minim, sehingga tidak ada pola pembayaran yang dapat memvalidasi kewajaran nominal ini. Kedua, pencatatan transaksi dilakukan di luar jam kerja operasional (pukul 23:15 WIB dan 01:15 WIB), yang tidak lazim untuk pembayaran jasa konsultasi profesional. Terakhir, tren pengeluaran bulanan menunjukkan bahwa transaksi ini berdiri sendiri dan tidak sejalan dengan pertumbuhan revenue perusahaan yang cenderung stagnan di angka Rp1.181.440.000.",
         "provenance": {
           "generated_by": "Agent_1_Financial_Analytics",
           "tools_used": [
@@ -118,16 +146,16 @@
         "evidence": {
           "context": [
             {
-              "source": "compare_category_baseline",
-              "insight": "Nominal Rp10.000.000,00 sangat dekat dengan rata-rata kategori Logistics (Rp9.926.858,40) dengan z-score 0,14."
+              "source": "get_vendor_transaction_history",
+              "insight": "Vendor hanya memiliki riwayat transaksi yang sangat terbatas, sehingga tidak ada data historis untuk memverifikasi kewajaran nominal Rp25.000.000."
             },
             {
               "source": "get_monthly_expense_trend",
-              "insight": "Tren pengeluaran perusahaan stabil dengan total expense bulanan di kisaran Rp39,7 juta pada Juli 2026."
+              "insight": "Transaksi ini tidak mencerminkan tren kenaikan biaya operasional yang sistematis, melainkan muncul sebagai pengeluaran tunggal yang tidak terduga."
             },
             {
-              "source": "get_vendor_transaction_history",
-              "insight": "PT Mitra Logistik Nusantara adalah vendor rutin dengan rata-rata transaksi Rp9.930.921,82 dan total 18 transaksi."
+              "source": "compare_category_baseline",
+              "insight": "Kategori konsultasi memiliki data pembanding yang terlalu sedikit untuk memberikan justifikasi statistik atas nominal transaksi ini."
             }
           ]
         }
@@ -135,7 +163,7 @@
       "agent2": {
         "verdict": "risk",
         "confidence": "high",
-        "finding": "Terdapat pelanggaran duplicate_confirmed pada faktur INV-2026-0815 dengan total pembayaran ganda sebesar 20.000.000 (dua kali transaksi masing-masing 10.000.000). Tidak ditemukan penjelasan sah atas duplikasi ini, dan pola transaksi penginput menunjukkan ketidakteraturan dalam nominal yang diproses.",
+        "finding": "Terdapat pembayaran ganda untuk faktur INV-2026-0731 dengan total nilai Rp50.000.000, di mana masing-masing transaksi sebesar Rp25.000.000 dibayarkan pada waktu yang berdekatan (selisih 2 jam). Selain itu, vendor 'CV Fiktif Sukses Makmur' memiliki status risiko tinggi. Mengingat revenue perusahaan pada bulan Juli 2026 sebesar Rp1.181.440.000, pengeluaran ganda yang tidak terjustifikasi ini merupakan indikasi kuat adanya kelalaian atau kesengajaan dalam proses pembayaran.",
         "provenance": {
           "generated_by": "Agent_2_Fraud_Investigator",
           "tools_used": [
@@ -148,55 +176,52 @@
           "context": [
             {
               "source": "get_user_spending_pattern",
-              "insight": "User Yogi Ferdiansyah (ID 9) memiliki pola transaksi yang tidak konsisten, di mana transaksi 10.000.000 ini jauh melampaui rata-rata input harian yang biasanya di bawah 5.000.000."
+              "insight": "User 'testingraihan' melakukan input transaksi ganda untuk vendor yang sama dalam waktu singkat, yang tidak lazim untuk prosedur pembayaran konsultasi."
             },
             {
               "source": "get_vendor_transaction_history",
-              "insight": "Vendor PT Mitra Logistik Nusantara (ID 7) memiliki riwayat transaksi yang stabil, sehingga duplikasi faktur INV-2026-0815 merupakan anomali yang tidak sesuai dengan pola penagihan vendor sebelumnya."
+              "insight": "Vendor hanya memiliki 2 transaksi dalam riwayatnya, keduanya merupakan bagian dari pembayaran ganda ini, menunjukkan vendor baru yang langsung terlibat dalam transaksi mencurigakan."
             },
             {
               "source": "get_monthly_expense_trend",
-              "insight": "Tren pengeluaran bulanan tidak menunjukkan lonjakan aktivitas logistik yang signifikan pada Juli 2026 yang dapat menjustifikasi pembayaran ganda tersebut."
+              "insight": "Tidak ditemukan tren biaya konsultasi yang mendukung kebutuhan pembayaran ganda sebesar Rp50.000.000 di bulan Juli 2026."
             }
           ]
         }
       },
       "agent3": {
-        "finding": "Transaksi ID 640 terbukti merupakan pembayaran ganda (duplicate payment) atas faktur INV-2026-0815 dengan total nilai Rp20.000.000,00. Meskipun secara nominal transaksi tunggal Rp10.000.000,00 terlihat wajar dibandingkan rata-rata kategori, fakta objektif mengenai duplikasi faktur dan waktu input di luar jam kerja mengindikasikan adanya risiko operasional atau fraud. Disarankan untuk melakukan pembatalan transaksi ganda dan audit internal terhadap user Yogi Ferdiansyah.",
+        "finding": "Telah ditemukan indikasi penyimpangan serius pada transaksi ID 706 senilai Rp25.000.000. Investigasi kami mengonfirmasi adanya pembayaran ganda untuk faktur yang sama (INV-2026-0731), sehingga total dana yang keluar mencapai Rp50.000.000. Transaksi ini dilakukan oleh staf keuangan di luar jam kerja operasional kepada vendor yang terdaftar dengan status risiko tinggi. Mengingat pendapatan perusahaan pada Juli 2026 sebesar Rp1.181.440.000, pengeluaran ganda ini tidak memiliki dasar bisnis yang sah dan berpotensi merugikan perusahaan. Kami merekomendasikan pembatalan transaksi, peninjauan ulang terhadap vendor tersebut, serta audit internal terhadap prosedur input data oleh staf terkait.",
         "verdict_review": {
-          "agent1": "rejected",
+          "agent1": "agreed",
           "agent2": "agreed",
-          "reason": "Agent 1 mengabaikan fakta objektif mengenai duplikasi faktur yang telah dikonfirmasi oleh sistem. Agent 2 memberikan penilaian yang lebih akurat dengan mempertimbangkan bukti duplikasi dan pola perilaku user."
+          "reason": "Kedua detektif memberikan temuan yang konsisten dengan data objektif. Keduanya menggunakan angka pendapatan yang tepat sesuai konteks (Rp1.181.440.000) dan mengidentifikasi masalah utama yaitu pembayaran ganda serta risiko vendor."
         },
         "provenance": {
           "generated_by": "Agent_3_Evidence_Review",
           "tools_used": [
-            "compare_category_baseline",
-            "get_vendor_transaction_history"
+            "get_vendor_transaction_history",
+            "get_monthly_expense_trend",
+            "get_user_spending_pattern"
           ]
         },
         "evidence": {
           "semantic": [
             {
               "source": "revenue_context",
-              "insight": "Tabel monthly_revenue kosong; tren revenue tidak dapat diverifikasi."
-            },
-            {
-              "source": "duplicate_confirmed",
-              "insight": "Faktur INV-2026-0815 terkonfirmasi dibayar dua kali dengan total Rp20.000.000,00."
+              "insight": "Pendapatan perusahaan pada Juli 2026 tercatat sebesar Rp1.181.440.000, yang mengonfirmasi bahwa transaksi ganda ini tidak proporsional."
             }
           ]
         },
         "scoring": {
-          "llm_semantic_adjustment": 15,
-          "adjustment_reason": "Penyesuaian positif diberikan karena bukti duplikasi faktur dan input di luar jam kerja secara signifikan meningkatkan profil risiko transaksi, membantah argumen kewajaran bisnis dari Agent 1."
+          "llm_semantic_adjustment": 0,
+          "adjustment_reason": "Temuan detektif sudah sangat akurat dan didukung penuh oleh data objektif, sehingga tidak diperlukan penyesuaian skor."
         }
       }
     },
     "scoring": {
-      "base_risk_score": 70,
-      "raw_score": 70,
-      "capped": false,
+      "base_risk_score": 80,
+      "raw_score": 100,
+      "capped": true,
       "max_base_score": 80,
       "agent_scores": [
         {
@@ -205,22 +230,41 @@
         },
         {
           "agent": "agent_2_fraud",
-          "score": 50
+          "score": 80
         }
       ],
       "objective_triggers": [
+        {
+          "code": "insufficient_baseline",
+          "points": 0,
+          "owner": "agent_1_financial",
+          "amplifier_only": true,
+          "narrative": "Belum ada cukup riwayat untuk membandingkan nilai ini — hanya 4 transaksi sejenis yang tercatat sebelumnya. Artinya kewajaran nominalnya belum bisa dinilai, bukan berarti sudah aman.",
+          "detail": {
+            "scope": "none",
+            "method": "insufficient_baseline",
+            "n_baseline": 4,
+            "median": null,
+            "mad": null,
+            "threshold": 3.5,
+            "computed_value": null,
+            "confidence": "none",
+            "is_anomaly": false,
+            "message": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar."
+          }
+        },
         {
           "code": "timing_outside_hours",
           "points": 20,
           "owner": "agent_1_financial",
           "amplifier_only": true,
-          "narrative": "Transaksi dicatat ke sistem pada Wednesday 22-07-2026 02:30 WIB, di luar jam kerja (Senin-Jumat 08:00-17:59).",
+          "narrative": "Tercatat Senin, 20 Juli 2026 pukul 23:15 WIB — di luar jam kerja (Senin-Jumat 08:00-17:59).",
           "detail": {
             "evaluated_field": "created_at",
             "reason": "waktu pencatatan ditulis server, tidak dapat diubah dari form",
-            "recorded_at_wib": "2026-07-22 02:30:00",
-            "time_wib": "02:30:00",
-            "weekday": "Wednesday",
+            "recorded_at_wib": "2026-07-20 23:15:00",
+            "time_wib": "23:15:00",
+            "weekday": "Monday",
             "timezone": "Asia/Jakarta",
             "work_hours": "08:00-17:59"
           }
@@ -230,16 +274,29 @@
           "points": 50,
           "owner": "agent_2_fraud",
           "amplifier_only": false,
-          "narrative": "Faktur INV-2026-0815 dibayar 2 kali ke vendor yang sama (total 20,000,000). Pembayaran pada 2026-07-22 10:00, 2026-07-22 10:00 WIB.",
+          "narrative": "Faktur INV-2026-0731 dibayar 2 kali ke vendor yang sama. Total yang keluar Rp50.000.000 untuk satu tagihan, sehingga ada Rp25.000.000 berpotensi kelebihan bayar. Pembayaran pada 2026-07-20 23:15, 2026-07-21 01:15 WIB.",
           "detail": {
             "rule": "same_invoice_no",
-            "invoice_no": "INV-2026-0815",
+            "invoice_no": "INV-2026-0731",
             "match_count": 2,
-            "total_amount": 20000000.0,
+            "total_amount": 50000000.0,
             "transaction_ids": [
-              640,
-              641
+              706,
+              707
             ]
+          }
+        },
+        {
+          "code": "vendor_flagged",
+          "points": 30,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "Vendor CV Fiktif Sukses Makmur sudah ditandai berisiko ('high_risk') di data master vendor.",
+          "detail": {
+            "vendor_id": 5,
+            "vendor_name": "CV Fiktif Sukses Makmur",
+            "vendor_status": "high_risk",
+            "total_transactions": 2
           }
         }
       ],
@@ -250,9 +307,9 @@
           "reason": "trigger eksklusif dengan poin lebih rendah"
         }
       ],
-      "llm_semantic_adjustment": 15,
-      "adjustment_reason": "Penyesuaian positif diberikan karena bukti duplikasi faktur dan input di luar jam kerja secara signifikan meningkatkan profil risiko transaksi, membantah argumen kewajaran bisnis dari Agent 1.",
-      "final_risk_score": 85,
+      "llm_semantic_adjustment": 0,
+      "adjustment_reason": "Temuan detektif sudah sangat akurat dan didukung penuh oleh data objektif, sehingga tidak diperlukan penyesuaian skor.",
+      "final_risk_score": 80,
       "risk_level": "Critical Risk",
       "recommendation": "Indikasi fraud fatal. Eskalasi darurat ke Manajer/CFO."
     }
