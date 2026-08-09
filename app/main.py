@@ -2,15 +2,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import func, text
 
 from app.db.session import SessionLocal
-from app.db.models import Transaction
+from app.db.models import AnalysisRun, Finding, Transaction
 from app.agents.agent1 import run_financial_investigator
 from app.agents.agent2 import run_fraud_investigator
 from app.agents.agent3 import run_evidence_reviewer
+from app.agents.llm import pinned_model
 from app.engine import detectors
+from app.engine.detectors import AGENT_1, AGENT_2
 from app.engine.scoring import calculate_base_score, finalize
+from app.tools.financial import get_transaction_details
 
 import json
 import concurrent.futures
@@ -116,6 +119,51 @@ def build_groups(candidates: dict[int, list]) -> list[dict]:
     ]
 
 
+def build_facts(db, transaction_id: int, triggers: list, owner: str) -> dict:
+    """
+    Merakit paket fakta untuk seorang detektif.
+
+    Agen hanya menerima trigger MILIKNYA (D3). Agent 1 tidak melihat trigger
+    fraud dan sebaliknya, supaya tidak ada agen yang menarasikan fakta milik
+    domain lain lalu tampak berselisih dengan rekannya di layar.
+    """
+    return {
+        "transaction": get_transaction_details(transaction_id),
+        "triggers": [
+            {"code": t.code, "points": t.points,
+             "narrative": t.narrative, "detail": t.detail}
+            for t in triggers if t.owner == owner
+        ],
+    }
+
+
+def persist_run(db, start_date: str, end_date: str) -> int:
+    run = AnalysisRun(start_date=start_date, end_date=end_date, status="running")
+    db.add(run)
+    db.commit()
+    return run.id
+
+
+def persist_finding(db, run_id: int, finding: dict) -> None:
+    """
+    Menyimpan temuan lengkap dengan provenance-nya.
+
+    Inilah alasan proyek memilih PostgreSQL/JSONB. Tanpa ini hasil hanya
+    di-stream ke browser dan hilang saat refresh, sehingga cerita "auditor
+    menelusuri temuan lama" tidak mungkin.
+    """
+    scoring = finding.get("scoring", {})
+    db.add(Finding(
+        run_id=run_id,
+        transaction_id=finding["transaction_id"],
+        related_transaction_ids=finding.get("related_transaction_ids", []),
+        final_risk_score=scoring.get("final_risk_score", 0),
+        risk_level=scoring.get("risk_level", "Unknown"),
+        payload=json.loads(json.dumps(finding, default=str)),
+    ))
+    db.commit()
+
+
 def merge_group_triggers(candidates: dict[int, list], ids: list[int]) -> list:
     """
     Menyatukan trigger seluruh anggota grup, membuang duplikasi.
@@ -153,10 +201,12 @@ async def run_analysis(request: AnalyzeRequest):
                 "message": "Menjalankan detektor deterministik atas seluruh transaksi...",
             })
 
+            run_id = persist_run(db, request.start_date, request.end_date)
             candidates = extract_candidates(db, request.start_date, request.end_date)
             if not candidates:
-                yield sse_event({"status": "complete", "findings": [],
-                                 "message": "No anomalies found"})
+                _close_run(db, run_id, "complete")
+                yield sse_event({"status": "complete", "run_id": run_id,
+                                 "findings": [], "message": "No anomalies found"})
                 return
 
             groups = build_groups(candidates)
@@ -179,24 +229,28 @@ async def run_analysis(request: AnalyzeRequest):
                     triggers = merge_group_triggers(candidates, related)
                     base_scoring = calculate_base_score(triggers)
 
-                    # --- 2. NARASI Agent 1 & 2 (paralel, tidak mempengaruhi skor)
+                    # --- 2. DETEKTIF Agent 1 & 2 (paralel, tidak mempengaruhi skor)
+                    # Masing-masing hanya menerima trigger MILIKNYA (D3).
                     yield sse_event({
                         "status": "progress", "node": "agent_1_2",
                         "message": f"Running Agent 1 and Agent 2 in parallel for Transaction ID {tid}...",
                     })
+                    facts_a1 = build_facts(db, tid, triggers, AGENT_1)
+                    facts_a2 = build_facts(db, tid, triggers, AGENT_2)
                     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-                        f1 = executor.submit(run_financial_investigator, transaction_id=tid)
-                        f2 = executor.submit(run_fraud_investigator, transaction_id=tid)
+                        f1 = executor.submit(run_financial_investigator, tid, facts_a1)
+                        f2 = executor.submit(run_fraud_investigator, tid, facts_a2)
                         json_a1 = _safe_agent(f1)
                         json_a2 = _safe_agent(f2)
 
-                    # --- 3. REVIEW Agent 3 (satu-satunya yang boleh menggeser skor)
+                    # --- 3. VERIFIKATOR Agent 3 (satu-satunya yang menggeser skor)
                     yield sse_event({
                         "status": "progress", "node": "agent_3",
                         "message": f"Running Agent 3 for Evidence Review on Transaction ID {tid}...",
                     })
                     json_a3 = _safe_agent_call(
-                        run_evidence_reviewer, tid, json_a1, json_a2, base_scoring)
+                        run_evidence_reviewer, tid, json_a1, json_a2, base_scoring,
+                        facts_a1)
 
                     a3_scoring = json_a3.get("scoring", {}) if json_a3 else {}
                     scoring = finalize(
@@ -213,7 +267,7 @@ async def run_analysis(request: AnalyzeRequest):
                         *json_a3.get("provenance", {}).get("tools_used", []),
                     })
 
-                    findings.append({
+                    finding = {
                         "transaction_id": tid,
                         "related_transaction_ids": related,
                         "finding": (json_a3.get("finding")
@@ -222,18 +276,23 @@ async def run_analysis(request: AnalyzeRequest):
                             "generated_by": "Agent_3_Final_Review",
                             "tools_used": tools_used,
                             "scored_by": "python_scoring_engine",
+                            "llm_model": pinned_model(),
                         },
                         "evidence": {
                             # Bukti objektif berasal dari detektor Python, bukan
                             # dari JSON yang ditulis agen.
                             "objective": base_scoring["objective_triggers"],
+                            "context": (json_a1.get("evidence", {}).get("context", [])
+                                        + json_a2.get("evidence", {}).get("context", [])),
                             "semantic": json_a3.get("evidence", {}).get("semantic", []),
                         },
                         "agent_results": {
                             "agent1": json_a1, "agent2": json_a2, "agent3": json_a3,
                         },
                         "scoring": scoring,
-                    })
+                    }
+                    persist_finding(db, run_id, finding)
+                    findings.append(finding)
 
                 except Exception as e:
                     findings.append({
@@ -243,9 +302,15 @@ async def run_analysis(request: AnalyzeRequest):
                         "raw_response": str(e),
                     })
 
-            yield sse_event({"status": "complete", "findings": findings})
+            _close_run(db, run_id, "complete")
+            yield sse_event({"status": "complete", "run_id": run_id,
+                             "findings": findings})
 
         except Exception as e:
+            try:
+                _close_run(db, run_id, "error")
+            except Exception:
+                pass
             yield sse_event({"status": "error", "message": str(e)})
         finally:
             db.close()
@@ -273,3 +338,58 @@ def _fallback_narrative(base_scoring: dict) -> str:
     """Narasi cadangan kalau LLM gagal, dirakit dari fakta Python."""
     lines = [t["narrative"] for t in base_scoring.get("objective_triggers", [])]
     return " ".join(lines) or "Tidak ada narasi yang dapat dihasilkan."
+
+
+def _close_run(db, run_id: int, status: str) -> None:
+    db.query(AnalysisRun).filter(AnalysisRun.id == run_id).update(
+        {"status": status, "finished_at": func.now()})
+    db.commit()
+
+
+@app.get("/api/runs")
+def list_runs(limit: int = 20):
+    """Daftar analisis terdahulu, terbaru lebih dulu."""
+    db = SessionLocal()
+    try:
+        runs = db.query(AnalysisRun).order_by(AnalysisRun.id.desc()).limit(limit).all()
+        counts = dict(db.query(Finding.run_id, func.count(Finding.id))
+                      .group_by(Finding.run_id).all())
+        return [{
+            "id": r.id,
+            "start_date": str(r.start_date),
+            "end_date": str(r.end_date),
+            "started_at": str(r.started_at),
+            "finished_at": str(r.finished_at) if r.finished_at else None,
+            "status": r.status,
+            "finding_count": counts.get(r.id, 0),
+        } for r in runs]
+    finally:
+        db.close()
+
+
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: int):
+    """
+    Membuka kembali sebuah analisis lengkap dengan provenance-nya.
+
+    Inilah yang membuat klaim "auditor dapat menelusuri temuan" benar: hasil
+    tetap ada setelah browser di-refresh maupun server di-restart.
+    """
+    db = SessionLocal()
+    try:
+        run = db.query(AnalysisRun).filter(AnalysisRun.id == run_id).first()
+        if not run:
+            return {"error": f"Run {run_id} tidak ditemukan."}
+        findings = (db.query(Finding).filter(Finding.run_id == run_id)
+                    .order_by(Finding.final_risk_score.desc()).all())
+        return {
+            "id": run.id,
+            "start_date": str(run.start_date),
+            "end_date": str(run.end_date),
+            "started_at": str(run.started_at),
+            "finished_at": str(run.finished_at) if run.finished_at else None,
+            "status": run.status,
+            "findings": [f.payload for f in findings],
+        }
+    finally:
+        db.close()

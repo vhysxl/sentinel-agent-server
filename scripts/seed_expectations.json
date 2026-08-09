@@ -7,7 +7,7 @@
       "id": "A",
       "name": "Lonjakan pengeluaran",
       "transaction_ids": [
-        187
+        255
       ],
       "expected_triggers": [
         "z_score_anomaly"
@@ -21,8 +21,8 @@
       "id": "B",
       "name": "Duplicate payment",
       "transaction_ids": [
-        220,
-        221
+        288,
+        289
       ],
       "invoice_no": "INV-2026-0731",
       "expected_triggers": [
@@ -39,9 +39,9 @@
       "id": "B2",
       "name": "Split payment",
       "transaction_ids": [
-        222,
-        223,
-        224
+        290,
+        291,
+        292
       ],
       "expected_triggers": [
         "split_payment",
@@ -56,36 +56,36 @@
       "id": "C",
       "name": "Transaksi normal",
       "transaction_ids": [
-        157,
-        158,
-        159,
-        160,
-        161,
-        162,
-        163,
-        164,
-        165,
-        166,
-        167,
-        168,
-        169,
-        170,
-        171,
-        172,
-        173,
-        174,
-        175,
-        176,
-        177,
-        178,
-        179,
-        180,
-        181,
-        182,
-        183,
-        184,
-        185,
-        186
+        225,
+        226,
+        227,
+        228,
+        229,
+        230,
+        231,
+        232,
+        233,
+        234,
+        235,
+        236,
+        237,
+        238,
+        239,
+        240,
+        241,
+        242,
+        243,
+        244,
+        245,
+        246,
+        247,
+        248,
+        249,
+        250,
+        251,
+        252,
+        253,
+        254
       ],
       "expected_triggers": [],
       "expected_band": null,
@@ -96,7 +96,7 @@
       "id": "D",
       "name": "False positive yang harus dibatalkan",
       "transaction_ids": [
-        206
+        274
       ],
       "expected_triggers": [
         "z_score_anomaly"
@@ -110,7 +110,7 @@
       "id": "E",
       "name": "Lembur yang sah",
       "transaction_ids": [
-        219
+        287
       ],
       "expected_triggers": [],
       "expected_band": null,

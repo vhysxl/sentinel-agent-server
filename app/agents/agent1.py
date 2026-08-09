@@ -1,119 +1,91 @@
-import os
-import sys
+"""
+Agent 1 — Detektif Analitik Finansial.
+
+PERANNYA: menyelidiki. Ia menerima fakta statistik yang sudah dihitung Python,
+lalu mencari KONTEKS di sekitarnya — apakah pola belanja vendor ini masuk akal,
+apakah kategorinya sedang naik, apakah ada penjelasan di balik angka itu.
+
+Tool yang dimilikinya adalah tool KONTEKS, bukan tool deteksi. Ia tidak
+menghitung ulang z-score atau memeriksa ulang jam, karena keduanya sudah
+dihitung dan menjadi dasar skor; menghitung ulang hanya menghasilkan versi kedua
+dari angka yang sama, yang bisa berbeda dan membingungkan pembaca.
+
+Ia TIDAK mempengaruhi skor. Skor sudah ditetapkan scoring engine sebelum agen ini
+dipanggil.
+"""
 import json
-from google import genai
-from google.genai import types
-from dotenv import load_dotenv
 
-# Fix Windows terminal UnicodeEncodeError (emoji printing)
-sys.stdout.reconfigure(encoding='utf-8')
-
-# Import tools
+from app.agents.llm import run_agent
 from app.tools.financial import (
-    get_transaction_details,
-    calculate_z_score,
+    compare_category_baseline,
+    get_monthly_expense_trend,
     get_vendor_transaction_history,
-    check_transaction_timing
 )
 
-def run_financial_investigator(transaction_id: int):
-    """
-    Menjalankan Agent 1 (Financial Analytics Investigator)
-    untuk menginvestigasi transaksi menggunakan Gemini API secara Interaktif (Tool Calling).
-    """
-    load_dotenv(override=True)
-    client = genai.Client(
-        api_key=os.environ.get("GEMINI_API_KEY")
-    )
+# Tool KONTEKS saja. Tidak ada calculate_z_score / check_transaction_timing:
+# keduanya sudah dijalankan Python dan hasilnya ada di dalam prompt.
+CONTEXT_TOOLS = [
+    get_vendor_transaction_history,
+    compare_category_baseline,
+    get_monthly_expense_trend,
+]
 
-    print(f"\n[Agent 1] Memulai investigasi (Tool Calling Loop) untuk Transaction ID: {transaction_id}...")
 
-    # 1. BENTUK PROMPT SISTEM/USER
+def run_financial_investigator(transaction_id: int, facts: dict | None = None):
+    """
+    `facts` berisi transaksi dan trigger milik Agent 1 yang sudah dihitung.
+    Dibuat opsional agar pemanggilan lama tetap jalan, tetapi tanpa fakta agen
+    ini hanya bisa menebak.
+    """
+    facts = facts or {}
+    transaction = facts.get("transaction", {})
+    triggers = facts.get("triggers", [])
+
+    findings_block = json.dumps(triggers, indent=2, ensure_ascii=False, default=str) \
+        if triggers else "(tidak ada trigger finansial pada transaksi ini)"
+
     prompt = f"""
-Kamu adalah Agent 1: Financial Analytics Investigator.
-Tugasmu adalah menginvestigasi transaksi dengan ID: {transaction_id}.
+Kamu adalah Agent 1: Detektif Analitik Finansial.
 
-Gunakan tools yang tersedia untuk mengumpulkan fakta objektif tentang:
-1. Detail transaksi
-2. Z-Score anomali pengeluaran
-3. Histori transaksi vendor
-4. Waktu transaksi (jam kerja/akhir pekan)
+Transaksi yang diselidiki (ID {transaction_id}):
+{json.dumps(transaction, indent=2, ensure_ascii=False, default=str)}
 
-Setelah kamu memiliki semua data objektif yang diperlukan, berikan laporan akhir HANYA DALAM FORMAT JSON yang valid tanpa markdown apapun.
-Gunakan nama metric yang stabil karena backend akan menghitung skor domain Agent 1 dari evidence ini.
-Format JSON yang DIBUTUHKAN:
+FAKTA OBJEKTIF yang SUDAH dihitung oleh mesin statistik Python.
+Angka-angka ini final dan sudah menjadi dasar skor risiko:
+{findings_block}
+
+ATURAN KERAS:
+- JANGAN menghitung ulang atau membantah angka di atas. Angka itu bukan pendapat.
+- JANGAN mengarang metrik baru yang tidak ada di daftar itu.
+- Kalau sebuah nilai berstatus `insufficient_baseline`, artinya nominal TIDAK
+  dapat dinilai secara statistik. Itu bukan berarti transaksinya wajar, dan
+  bukan berarti skornya nol. Katakan apa adanya.
+- Tugasmu adalah MENJELASKAN, bukan menilai ulang.
+
+Tugasmu sebagai detektif:
+1. Terjemahkan angka di atas menjadi kalimat yang dimengerti orang keuangan.
+2. Gunakan tool konteks untuk mencari LATAR di sekitar angka itu:
+   - `get_vendor_transaction_history` — seperti apa kebiasaan vendor ini?
+   - `compare_category_baseline` — bagaimana kalau dibandingkan kategorinya?
+   - `get_monthly_expense_trend` — apakah biaya memang sedang naik belakangan?
+3. Sebutkan apa yang kamu temukan, termasuk kalau konteksnya justru MEMBUAT
+   transaksi ini terlihat lebih wajar. Detektif yang jujur melaporkan keduanya.
+
+Balas HANYA JSON valid tanpa markdown:
 {{
-  "finding": "Ringkasan komprehensif temuan dari multi-dimensi (timing, vendor, z-score).",
+  "finding": "Narasi bahasa Indonesia untuk auditor. Sebutkan angka konkret.",
   "provenance": {{
       "generated_by": "Agent_1_Financial_Analytics",
-      "tools_used": ["daftar_tools_yang_kamu_panggil"]
+      "tools_used": ["tool konteks yang benar-benar kamu panggil"]
   }},
   "evidence": {{
-      "objective": [
-          {{"metric": "z_score", "value": 70.58, "status": "anomali ekstrim"}},
-          {{"metric": "timing", "value": "23:59:00", "status": "unusual_timing"}},
-          {{"metric": "vendor_history", "value": "new_vendor", "status": "mencurigakan"}}
+      "context": [
+          {{"source": "nama_tool", "insight": "apa yang kamu temukan dari tool itu"}}
       ]
   }}
 }}
-Ingat: kembalikan HANYA format JSON di output akhirmu!
 """
 
-    # 2. DEFINISIKAN TOOLS & KONFIGURASI
-    tools_list = [
-        get_transaction_details,
-        calculate_z_score,
-        get_vendor_transaction_history,
-        check_transaction_timing
-    ]
-
-    config = types.GenerateContentConfig(
-        tools=tools_list,
-        temperature=0.2,
-        top_p=0.95,
-        max_output_tokens=4096,
-        # Mengaktifkan automatic function calling (Gemini akan mengeksekusi fungsi Python secara otomatis)
-    )
-
-    # 3. PANGGIL LLM (CHAT SESSION) DENGAN MULTI-FALLBACK
-    models_to_try = [
-        'models/gemini-3.5-flash',
-        'models/gemini-3.6-flash',
-        'models/gemini-3.5-flash-lite',
-        'models/gemini-3-flash-preview'
-    ]
-
-    response = None
-    for idx, model_name in enumerate(models_to_try):
-        print(f"[Agent 1] Menganalisis dan memanggil tools secara otomatis ({model_name})...")
-        try:
-            chat = client.chats.create(model=model_name, config=config)
-            response = chat.send_message(prompt)
-            break  # Berhasil, keluar dari loop fallback
-        except Exception as e:
-            error_str = str(e)
-            print(f"[Agent 1] Error pada model {model_name}: {error_str}")
-            is_overloaded = any(err in error_str for err in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"])
-            if is_overloaded and idx < len(models_to_try) - 1:
-                print(f"[Agent 1] Fallback ke model berikutnya...")
-                continue
-            # Jika error selain overload, atau sudah mentok di model terakhir
-            raise e
-
-
-    content = response.text
-    print("\n[Agent 1] Selesai Investigasi. Laporan Akhir:")
-    print(content)
-
-    # Mengembalikan custom object agar kompatibel dengan app/main.py
-    class MockMessage:
-        def __init__(self, c):
-            self.content = c
-    class MockChoice:
-        def __init__(self, c):
-            self.message = MockMessage(c)
-    class MockResponse:
-        def __init__(self, c):
-            self.choices = [MockChoice(c)]
-
-    return MockResponse(content)
+    response = run_agent(label="Agent 1", prompt=prompt, tools=CONTEXT_TOOLS)
+    print(f"\n[Agent 1] Selesai (model {response.model}).")
+    return response

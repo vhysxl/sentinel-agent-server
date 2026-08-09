@@ -1,110 +1,91 @@
-import os
-import sys
+"""
+Agent 2 — Detektif Pola Fraud.
+
+PERANNYA: menyelidiki pola. Ia menerima pelanggaran yang sudah dipastikan Python
+(duplikasi faktur, split payment, status vendor), lalu mencari konteks perilaku
+di sekitarnya — siapa yang menginput, apakah ini kebiasaan atau kejadian tunggal.
+
+Tool deteksinya dicabut karena alasan konkret, bukan teoretis:
+`find_duplicate_expenses` hanya mencari nominal identik dalam 24 jam, sehingga
+untuk kasus split payment berjarak 2 hari ia SELALU mengembalikan "0 ditemukan".
+Pada run sebelumnya Agent 2 karena itu menulis status "aman" pada temuan yang
+diberi skor 60 High Risk. Toolset-nya lebih miskin daripada detektor Python,
+jadi memakainya hanya menghasilkan bantahan yang keliru.
+
+Ia TIDAK mempengaruhi skor.
+"""
 import json
-from google import genai
-from google.genai import types
-from dotenv import load_dotenv
 
-# Fix Windows terminal UnicodeEncodeError (emoji printing)
-sys.stdout.reconfigure(encoding='utf-8')
+from app.agents.llm import run_agent
+from app.tools.financial import (
+    get_user_spending_pattern,
+    get_vendor_transaction_history,
+)
 
-# Import tools
-from app.tools.financial import get_transaction_details
-from app.tools.fraud import find_duplicate_expenses, get_vendor_history
+# Tool KONTEKS saja: siapa orangnya, seperti apa vendornya.
+# Tidak ada find_duplicate_expenses / get_vendor_history — keduanya sudah
+# dijalankan Python dengan definisi yang lebih lengkap.
+CONTEXT_TOOLS = [
+    get_vendor_transaction_history,
+    get_user_spending_pattern,
+]
 
-def run_fraud_investigator(transaction_id: int):
-    """
-    Menjalankan Agent 2 (Fraud Pattern Investigator)
-    untuk mendeteksi pola penipuan (split payment, duplikasi, vendor fiktif)
-    menggunakan Gemini API secara Interaktif (Tool Calling).
-    """
-    load_dotenv(override=True)
-    client = genai.Client(
-        api_key=os.environ.get("GEMINI_API_KEY")
-    )
 
-    print(f"\n[Agent 2] Memulai investigasi Fraud (Tool Calling Loop) untuk Transaction ID: {transaction_id}...")
+def run_fraud_investigator(transaction_id: int, facts: dict | None = None):
+    facts = facts or {}
+    transaction = facts.get("transaction", {})
+    triggers = facts.get("triggers", [])
 
-    # 1. BENTUK PROMPT SISTEM/USER
+    findings_block = json.dumps(triggers, indent=2, ensure_ascii=False, default=str) \
+        if triggers else "(tidak ada pola fraud yang terdeteksi pada transaksi ini)"
+
     prompt = f"""
-Kamu adalah Agent 2: Fraud Pattern Investigator.
-Tugasmu adalah menginvestigasi transaksi dengan ID: {transaction_id} untuk mencari indikasi penipuan.
+Kamu adalah Agent 2: Detektif Pola Fraud.
 
-Langkah-langkah:
-1. Panggil `get_transaction_details` menggunakan transaction_id untuk mendapatkan amount, vendor_id, dan transaction_date.
-2. Gunakan `find_duplicate_expenses` menggunakan data dari langkah 1 (amount, vendor_id, date) untuk mengecek kemungkinan transaksi ganda (split payment).
-3. Gunakan `get_vendor_history` menggunakan vendor_id untuk memeriksa apakah vendor ini valid atau fiktif.
+Transaksi yang diselidiki (ID {transaction_id}):
+{json.dumps(transaction, indent=2, ensure_ascii=False, default=str)}
 
-Setelah kamu memiliki semua data objektif yang diperlukan, berikan laporan akhir HANYA DALAM FORMAT JSON yang valid tanpa markdown apapun.
-Gunakan nama metric yang stabil karena backend akan menghitung skor domain Agent 2 dari evidence ini.
-Format JSON yang DIBUTUHKAN:
+POLA YANG SUDAH DIPASTIKAN oleh detektor Python. Ini hasil query, bukan dugaan:
+{findings_block}
+
+ATURAN KERAS:
+- JANGAN membantah pola di atas dan jangan menyatakan "aman" atas transaksi yang
+  sudah punya pola. Kalau daftarnya berisi sesuatu, berarti ada yang ditemukan.
+- JANGAN mengarang jenis pelanggaran baru.
+- Bedakan dengan tegas, jangan pernah tertukar:
+    * `duplicate_confirmed`  = faktur yang SAMA dibayar dua kali. Uang keluar
+      dua kali untuk satu kewajiban. Ini BUKAN split payment.
+    * `duplicate_suspected`  = dugaan, karena nomor faktur tidak diisi. Wajib
+      memakai kata "indikasi", bukan "terdeteksi".
+    * `split_payment`        = faktur BERBEDA, sengaja dipecah agar masing-masing
+      lolos ambang persetujuan. Tidak ada pembayaran ganda di sini; yang
+      dilanggar adalah kontrol persetujuan. Sebutkan nilai ambangnya.
+- Kalau daftarnya kosong, katakan tidak ada pola fraud yang terdeteksi.
+
+Tugasmu sebagai detektif:
+1. Jelaskan pelanggarannya dalam bahasa yang dimengerti orang keuangan, dan
+   sebutkan APA yang dilanggar (uang ganda? atau kontrol persetujuan?).
+2. Gunakan tool konteks untuk melihat latar perilakunya:
+   - `get_user_spending_pattern` — apakah penginput ini biasa bertransaksi
+     sebesar ini, atau ini menyimpang dari kebiasaannya?
+   - `get_vendor_transaction_history` — apakah vendor ini punya rekam jejak?
+3. Laporkan juga kalau konteksnya justru meringankan.
+
+Balas HANYA JSON valid tanpa markdown:
 {{
-  "finding": "Ringkasan komprehensif temuan terkait pola penipuan (duplikasi, status vendor).",
+  "finding": "Narasi bahasa Indonesia. Sebutkan nomor faktur / nilai ambang bila relevan.",
   "provenance": {{
       "generated_by": "Agent_2_Fraud_Investigator",
-      "tools_used": ["daftar_tools_yang_kamu_panggil"]
+      "tools_used": ["tool konteks yang benar-benar kamu panggil"]
   }},
   "evidence": {{
-      "objective": [
-          {{"metric": "duplicate_transaction", "value": "2 ditemukan", "status": "indikasi split payment"}},
-          {{"metric": "vendor_history", "value": "new_vendor", "status": "mencurigakan"}}
+      "context": [
+          {{"source": "nama_tool", "insight": "apa yang kamu temukan dari tool itu"}}
       ]
   }}
 }}
-Ingat: kembalikan HANYA format JSON di output akhirmu!
 """
 
-    # 2. DEFINISIKAN TOOLS & KONFIGURASI
-    tools_list = [
-        get_transaction_details,
-        find_duplicate_expenses,
-        get_vendor_history
-    ]
-
-    config = types.GenerateContentConfig(
-        tools=tools_list,
-        temperature=0.2,
-        top_p=0.95,
-        max_output_tokens=4096,
-    )
-
-    # 3. PANGGIL LLM (CHAT SESSION) DENGAN MULTI-FALLBACK
-    models_to_try = [
-        'models/gemini-3.5-flash',
-        'models/gemini-3.6-flash',
-        'models/gemini-3.5-flash-lite',
-        'models/gemini-3-flash-preview'
-    ]
-
-    response = None
-    for idx, model_name in enumerate(models_to_try):
-        print(f"[Agent 2] Menganalisis pola fraud dan memanggil tools secara otomatis ({model_name})...")
-        try:
-            chat = client.chats.create(model=model_name, config=config)
-            response = chat.send_message(prompt)
-            break
-        except Exception as e:
-            error_str = str(e)
-            print(f"[Agent 2] Error pada model {model_name}: {error_str}")
-            is_overloaded = any(err in error_str for err in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"])
-            if is_overloaded and idx < len(models_to_try) - 1:
-                print(f"[Agent 2] Fallback ke model berikutnya...")
-                continue
-            raise e
-
-    content = response.text
-    print("\n[Agent 2] Selesai Investigasi. Laporan Akhir:")
-    print(content)
-
-    # Mengembalikan custom object agar kompatibel dengan app/main.py
-    class MockMessage:
-        def __init__(self, c):
-            self.content = c
-    class MockChoice:
-        def __init__(self, c):
-            self.message = MockMessage(c)
-    class MockResponse:
-        def __init__(self, c):
-            self.choices = [MockChoice(c)]
-
-    return MockResponse(content)
+    response = run_agent(label="Agent 2", prompt=prompt, tools=CONTEXT_TOOLS)
+    print(f"\n[Agent 2] Selesai (model {response.model}).")
+    return response

@@ -1,25 +1,21 @@
 [
   {
-    "transaction_id": 187,
+    "transaction_id": 255,
     "related_transaction_ids": [
-      187
+      255
     ],
-    "finding": "Evaluasi terhadap transaksi ID 187 menunjukkan tidak adanya counter-evidence yang dapat menjustifikasi pengeluaran sebesar Rp45.000.000 untuk kategori Office Supplies. Klaim deskripsi transaksi mengenai 'demand operasional sangat tinggi' tidak didukung oleh data pertumbuhan revenue bulanan yang stagnan (+0,97%). Transaksi ini terbukti menjadi outlier ekstrim baik pada baseline vendor maupun baseline kategori Office Supplies (25x rata-rata kategori). Ditambah dengan ditemukannya anomali administratif berupa tanggal transaksi sebelum tanggal pendaftaran vendor (backdated), tingkat risiko transaksi ini semakin terkonfirmasi.",
+    "finding": "Verifikasi mengonfirmasi adanya anomali ekstrem pada Transaksi ID 255 sebesar Rp45.000.000,00 untuk kategori 'Office Supplies'. Klaim dalam deskripsi transaksi bahwa pembelian dilakukan karena 'demand operasional sangat tinggi akhir bulan' terbantahkan oleh data objektif: pertama, transaksi tercatat pada tanggal 13 Juli 2026 (tengah bulan, bukan akhir bulan); kedua, pertumbuhan revenue pada bulan Juli 2026 stagnan hanya sebesar +0,97% (Rp1.181.440.000,00 dibanding Rp1.170.080.000,00), sehingga tidak ada lonjakan aktivitas bisnis yang membenarkan pengeluaran sebesar ini. Transaksi ini juga tidak memiliki nomor invoice resmi dan nilainya mencapai 25,06 kali lipat dari rata-rata kategori Office Supplies (Rp1.795.609,98). Direkomendasikan untuk melakukan audit fisik atas keberadaan barang dan meminta bukti invoice resmi dari CV. ATK Sejahtera.",
     "provenance": {
       "generated_by": "Agent_3_Final_Review",
       "tools_used": [
-        "calculate_z_score",
-        "check_transaction_timing",
         "compare_category_baseline",
-        "find_duplicate_expenses",
         "get_monthly_expense_trend",
         "get_sales_trend",
-        "get_transaction_details",
         "get_user_spending_pattern",
-        "get_vendor_history",
         "get_vendor_transaction_history"
       ],
-      "scored_by": "python_scoring_engine"
+      "scored_by": "python_scoring_engine",
+      "llm_model": "models/gemini-3.5-flash"
     },
     "evidence": {
       "objective": [
@@ -43,109 +39,122 @@
           }
         }
       ],
-      "semantic": [
+      "context": [
         {
-          "source": "get_sales_trend",
-          "insight": "Deskripsi transaksi mengklaim demand operasional sangat tinggi, namun tren penjualan bulan Juli 2026 hanya tumbuh 0,97% (stagnan), membantah alasan bisnis pengeluaran besar tersebut."
+          "source": "get_vendor_transaction_history",
+          "insight": "CV. ATK Sejahtera adalah vendor terdaftar sejak Februari 2026 dengan total 31 transaksi. Transaksi historisnya didominasi oleh pembelian rutin berkisar antara Rp1,1 juta hingga Rp2,5 juta. Transaksi ID 255 senilai Rp45.000.000,00 merupakan lonjakan ekstrem yang tidak pernah terjadi sebelumnya pada vendor ini."
         },
         {
           "source": "compare_category_baseline",
-          "insight": "Nominal transaksi Rp45.000.000 bernilai 25x lebih besar dari rata-rata kategori Office Supplies (Rp1.795.609) dengan z-score kategori 87.75."
+          "insight": "Transaksi ini diklasifikasikan sebagai 'category_outlier' karena nilainya (Rp45.000.000,00) mencapai 25,06 kali lipat dari rata-rata kategori Office Supplies sebesar Rp1.795.609,98, dengan z-score kategori sebesar 87,75."
+        },
+        {
+          "source": "get_monthly_expense_trend",
+          "insight": "Meskipun tren pengeluaran bulanan secara keseluruhan menurun sebesar 56,75% di bulan Juli (Rp110.813.701,17 dari 6 transaksi) dibandingkan Juni (Rp256.204.917,15), transaksi tunggal ini menyumbang lebih dari 40% dari total pengeluaran bulan Juli berjalan."
         },
         {
           "source": "get_user_spending_pattern",
-          "insight": "Rata-rata pengeluaran staf pembeli (Yogi Ferdiansyah) untuk kategori Office Supplies adalah Rp5.330.476, menjadikan pengeluaran Rp45.000.000 ini jauh melampaui pola transaksi normalnya."
+          "insight": "Yogi Ferdiansyah memiliki rata-rata transaksi Office Supplies sebesar Rp5.330.476,61 dari total 12 transaksi. Transaksi senilai Rp45.000.000 ini jauh melampaui rata-rata tersebut, meskipun masih di bawah batas transaksi maksimumnya sebesar Rp120.000.000."
+        },
+        {
+          "source": "get_vendor_transaction_history",
+          "insight": "CV. ATK Sejahtera adalah vendor mapan (established) sejak Februari 2026 dengan total 31 transaksi dan rata-rata nilai transaksi Rp3.189.299,98. Transaksi ID 255 senilai Rp45.000.000 merupakan lonjakan ekstrem dibandingkan transaksi rutin sebelumnya yang berkisar antara Rp1.100.000 hingga Rp2.500.000."
+        }
+      ],
+      "semantic": [
+        {
+          "source": "get_sales_trend",
+          "insight": "Pertumbuhan revenue Juli 2026 stagnan di +0,97% (Rp1.181.440.000,00 vs Rp1.170.080.000,00), membantah klaim adanya demand operasional yang sangat tinggi."
+        },
+        {
+          "source": "compare_category_baseline",
+          "insight": "Transaksi ID 255 diklasifikasikan sebagai category_outlier dengan nilai 25,06 kali lipat dari rata-rata kategori Office Supplies (Rp1.795.609,98) dan z-score sebesar 87,75."
+        },
+        {
+          "source": "get_monthly_expense_trend",
+          "insight": "Total pengeluaran Juli 2026 menurun sebesar 56,75% dibanding Juni 2026, namun transaksi tunggal ini menyumbang lebih dari 40% dari total pengeluaran bulan Juli berjalan."
         }
       ]
     },
     "agent_results": {
       "agent1": {
-        "finding": "Transaksi ID 187 senilai Rp45.000.000 untuk pembelian ATK borongan menunjukkan anomali nominal yang sangat ekstrim dengan modified z-score sebesar 94.8 terhadap riwayat transaksi vendor CV. ATK Sejahtera (median Rp1.699.226). Meskipun demikian, transaksi ini dilakukan pada jam kerja normal (Senin, 16:45 WIB) dan menggunakan vendor yang sudah terdaftar lama (established vendor dengan total 31 transaksi).",
+        "finding": "Ditemukan anomali ekstrem pada transaksi ID 255 sebesar Rp45.000.000,00 untuk kategori 'Office Supplies' yang diinput oleh Yogi Ferdiansyah. Secara statistik, nominal ini memiliki modified z-score sebesar 94,8 terhadap baseline vendor CV. ATK Sejahtera (median Rp1.699.226,42 dan MAD Rp308.100,18), menunjukkan lonjakan yang sangat tidak wajar. Analisis kategori menunjukkan transaksi ini 25,06 kali lebih besar dari rata-rata kategori Office Supplies (Rp1.795.609,98) dengan z-score kategori sebesar 87,75, jauh melampaui batas maksimum wajar kategori sebesar Rp2.873.309,18. Selain itu, terdapat ketidaksesuaian narasi: deskripsi mencantumkan 'demand operasional sangat tinggi akhir bulan', namun transaksi tercatat pada tanggal 13 Juli 2026 (tengah bulan) tanpa nomor invoice resmi.",
         "provenance": {
           "generated_by": "Agent_1_Financial_Analytics",
           "tools_used": [
-            "get_transaction_details",
-            "calculate_z_score",
             "get_vendor_transaction_history",
-            "check_transaction_timing"
+            "compare_category_baseline",
+            "get_monthly_expense_trend"
           ]
         },
         "evidence": {
-          "objective": [
+          "context": [
             {
-              "metric": "z_score",
-              "value": 94.8,
-              "status": "anomali ekstrim"
+              "source": "get_vendor_transaction_history",
+              "insight": "CV. ATK Sejahtera adalah vendor terdaftar sejak Februari 2026 dengan total 31 transaksi. Transaksi historisnya didominasi oleh pembelian rutin berkisar antara Rp1,1 juta hingga Rp2,5 juta. Transaksi ID 255 senilai Rp45.000.000,00 merupakan lonjakan ekstrem yang tidak pernah terjadi sebelumnya pada vendor ini."
             },
             {
-              "metric": "timing",
-              "value": "16:45:00",
-              "status": "normal_timing"
+              "source": "compare_category_baseline",
+              "insight": "Transaksi ini diklasifikasikan sebagai 'category_outlier' karena nilainya (Rp45.000.000,00) mencapai 25,06 kali lipat dari rata-rata kategori Office Supplies sebesar Rp1.795.609,98, dengan z-score kategori sebesar 87,75."
             },
             {
-              "metric": "vendor_history",
-              "value": "established_vendor",
-              "status": "normal"
+              "source": "get_monthly_expense_trend",
+              "insight": "Meskipun tren pengeluaran bulanan secara keseluruhan menurun sebesar 56,75% di bulan Juli (Rp110.813.701,17 dari 6 transaksi) dibandingkan Juni (Rp256.204.917,15), transaksi tunggal ini menyumbang lebih dari 40% dari total pengeluaran bulan Juli berjalan."
             }
           ]
         }
       },
       "agent2": {
-        "finding": "Investigasi terhadap transaksi ID 187 menunjukkan tidak adanya transaksi duplikat (split payment) dengan nominal Rp45.000.000 pada vendor CV. ATK Sejahtera dalam rentang waktu 24 jam. Vendor ini berstatus 'established_vendor' dengan total 31 transaksi dan tidak memiliki risk flag. Namun, terdapat kejanggalan administratif yang signifikan di mana tanggal transaksi (13 Juli 2026) terjadi sebelum tanggal bergabungnya vendor di sistem (5 Agustus 2026), yang mengindikasikan adanya potensi pencatatan mundur (backdated transaction) atau anomali data pendaftaran vendor.",
+        "finding": "Tidak ada pola fraud yang terdeteksi pada transaksi ini. Tidak ditemukan adanya indikasi pembayaran ganda (duplicate payment) maupun pemecahan transaksi untuk menghindari batas persetujuan (split payment). Namun, transaksi senilai Rp45.000.000 ini merupakan anomali nominal yang sangat besar (outlier) jika dibandingkan dengan profil historis penginput dan vendor. Bagi penginput (Yogi Ferdiansyah), rata-rata pengeluaran untuk kategori Office Supplies biasanya hanya Rp5.330.476,61. Bagi vendor (CV. ATK Sejahtera), rata-rata transaksi historis mereka hanya sebesar Rp3.189.299,98 dengan transaksi rutin sebelumnya berkisar antara Rp1.100.000 hingga Rp2.500.000. Meskipun tidak ada pelanggaran aturan keuangan yang terdeteksi, lonjakan nilai transaksi yang tidak biasa ini direkomendasikan untuk diverifikasi secara manual guna memastikan keabsahan fisik barang belanjaan.",
         "provenance": {
           "generated_by": "Agent_2_Fraud_Investigator",
           "tools_used": [
-            "get_transaction_details",
-            "find_duplicate_expenses",
-            "get_vendor_history"
+            "get_user_spending_pattern",
+            "get_vendor_transaction_history"
           ]
         },
         "evidence": {
-          "objective": [
+          "context": [
             {
-              "metric": "duplicate_transaction",
-              "value": "0 duplikat ditemukan",
-              "status": "aman"
+              "source": "get_user_spending_pattern",
+              "insight": "Yogi Ferdiansyah memiliki rata-rata transaksi Office Supplies sebesar Rp5.330.476,61 dari total 12 transaksi. Transaksi senilai Rp45.000.000 ini jauh melampaui rata-rata tersebut, meskipun masih di bawah batas transaksi maksimumnya sebesar Rp120.000.000."
             },
             {
-              "metric": "vendor_history",
-              "value": "established_vendor",
-              "status": "aman tetapi terdapat anomali tanggal bergabung (join_date setelah transaction_date)"
+              "source": "get_vendor_transaction_history",
+              "insight": "CV. ATK Sejahtera adalah vendor mapan (established) sejak Februari 2026 dengan total 31 transaksi dan rata-rata nilai transaksi Rp3.189.299,98. Transaksi ID 255 senilai Rp45.000.000 merupakan lonjakan ekstrem dibandingkan transaksi rutin sebelumnya yang berkisar antara Rp1.100.000 hingga Rp2.500.000."
             }
           ]
         }
       },
       "agent3": {
-        "finding": "Evaluasi terhadap transaksi ID 187 menunjukkan tidak adanya counter-evidence yang dapat menjustifikasi pengeluaran sebesar Rp45.000.000 untuk kategori Office Supplies. Klaim deskripsi transaksi mengenai 'demand operasional sangat tinggi' tidak didukung oleh data pertumbuhan revenue bulanan yang stagnan (+0,97%). Transaksi ini terbukti menjadi outlier ekstrim baik pada baseline vendor maupun baseline kategori Office Supplies (25x rata-rata kategori). Ditambah dengan ditemukannya anomali administratif berupa tanggal transaksi sebelum tanggal pendaftaran vendor (backdated), tingkat risiko transaksi ini semakin terkonfirmasi.",
+        "finding": "Verifikasi mengonfirmasi adanya anomali ekstrem pada Transaksi ID 255 sebesar Rp45.000.000,00 untuk kategori 'Office Supplies'. Klaim dalam deskripsi transaksi bahwa pembelian dilakukan karena 'demand operasional sangat tinggi akhir bulan' terbantahkan oleh data objektif: pertama, transaksi tercatat pada tanggal 13 Juli 2026 (tengah bulan, bukan akhir bulan); kedua, pertumbuhan revenue pada bulan Juli 2026 stagnan hanya sebesar +0,97% (Rp1.181.440.000,00 dibanding Rp1.170.080.000,00), sehingga tidak ada lonjakan aktivitas bisnis yang membenarkan pengeluaran sebesar ini. Transaksi ini juga tidak memiliki nomor invoice resmi dan nilainya mencapai 25,06 kali lipat dari rata-rata kategori Office Supplies (Rp1.795.609,98). Direkomendasikan untuk melakukan audit fisik atas keberadaan barang dan meminta bukti invoice resmi dari CV. ATK Sejahtera.",
         "provenance": {
           "generated_by": "Agent_3_Evidence_Review",
           "tools_used": [
-            "get_transaction_details",
-            "compare_category_baseline",
             "get_sales_trend",
-            "get_monthly_expense_trend",
-            "get_user_spending_pattern"
+            "compare_category_baseline",
+            "get_monthly_expense_trend"
           ]
         },
         "evidence": {
           "semantic": [
             {
               "source": "get_sales_trend",
-              "insight": "Deskripsi transaksi mengklaim demand operasional sangat tinggi, namun tren penjualan bulan Juli 2026 hanya tumbuh 0,97% (stagnan), membantah alasan bisnis pengeluaran besar tersebut."
+              "insight": "Pertumbuhan revenue Juli 2026 stagnan di +0,97% (Rp1.181.440.000,00 vs Rp1.170.080.000,00), membantah klaim adanya demand operasional yang sangat tinggi."
             },
             {
               "source": "compare_category_baseline",
-              "insight": "Nominal transaksi Rp45.000.000 bernilai 25x lebih besar dari rata-rata kategori Office Supplies (Rp1.795.609) dengan z-score kategori 87.75."
+              "insight": "Transaksi ID 255 diklasifikasikan sebagai category_outlier dengan nilai 25,06 kali lipat dari rata-rata kategori Office Supplies (Rp1.795.609,98) dan z-score sebesar 87,75."
             },
             {
-              "source": "get_user_spending_pattern",
-              "insight": "Rata-rata pengeluaran staf pembeli (Yogi Ferdiansyah) untuk kategori Office Supplies adalah Rp5.330.476, menjadikan pengeluaran Rp45.000.000 ini jauh melampaui pola transaksi normalnya."
+              "source": "get_monthly_expense_trend",
+              "insight": "Total pengeluaran Juli 2026 menurun sebesar 56,75% dibanding Juni 2026, namun transaksi tunggal ini menyumbang lebih dari 40% dari total pengeluaran bulan Juli berjalan."
             }
           ]
         },
         "scoring": {
-          "llm_semantic_adjustment": 10,
-          "adjustment_reason": "Justifikasi bisnis pada deskripsi transaksi terbantahkan oleh data tren penjualan yang stagnan (+0,97%). Nominal transaksi juga terbukti 25x rata-rata kategori Office Supplies, serta diperkuat anomali pencatatan mundur (backdated)."
+          "llm_semantic_adjustment": 15,
+          "adjustment_reason": "Klaim deskripsi transaksi terbantahkan oleh data: transaksi tercatat tengah bulan (13 Juli) sedangkan deskripsi menyebut akhir bulan, dan pertumbuhan revenue stagnan (+0,97%) membantah klaim 'demand operasional sangat tinggi'. Tidak adanya nomor invoice juga memperkuat indikasi risiko."
         }
       }
     },
@@ -182,32 +191,24 @@
         }
       ],
       "suppressed_triggers": [],
-      "llm_semantic_adjustment": 10,
-      "adjustment_reason": "Justifikasi bisnis pada deskripsi transaksi terbantahkan oleh data tren penjualan yang stagnan (+0,97%). Nominal transaksi juga terbukti 25x rata-rata kategori Office Supplies, serta diperkuat anomali pencatatan mundur (backdated).",
-      "final_risk_score": 60,
+      "llm_semantic_adjustment": 15,
+      "adjustment_reason": "Klaim deskripsi transaksi terbantahkan oleh data: transaksi tercatat tengah bulan (13 Juli) sedangkan deskripsi menyebut akhir bulan, dan pertumbuhan revenue stagnan (+0,97%) membantah klaim 'demand operasional sangat tinggi'. Tidak adanya nomor invoice juga memperkuat indikasi risiko.",
+      "final_risk_score": 65,
       "risk_level": "High Risk",
       "recommendation": "Indikasi kecurangan. Butuh verifikasi manual (Manual Review)."
     }
   },
   {
-    "transaction_id": 206,
+    "transaction_id": 274,
     "related_transaction_ids": [
-      206
+      274
     ],
-    "finding": "Evaluasi lanjutan pada transaksi ID 206 sebesar Rp 120.000.000 untuk PT. Solusi Teknologi Makmur (IT Services) menunjukkan adanya counter-evidence yang kuat. Deskripsi transaksi mengindikasikan 'Penambahan kapasitas server dan lisensi untuk menopang lonjakan order', yang terverifikasi valid karena data penjualan (sales trend) pada bulan Juni 2026 menunjukkan lonjakan revenue yang signifikan sebesar +43.39% (mencapai Rp 1.17 miliar dibanding Rp 816 juta pada bulan sebelumnya). Meskipun secara statistik transaksi ini merupakan outlier ekstrem (Z-score 36.26 terhadap vendor dan 45.35 terhadap kategori) dan dicatat oleh staf finance, peningkatan biaya infrastruktur TI ini sangat selaras dan terjustifikasi oleh kebutuhan operasional nyata untuk menopang lonjakan volume order yang tinggi.",
+    "finding": "Nominal 120,000,000 berada pada modified z-score 36.3 terhadap 18 transaksi pembanding (median 10,407,977, MAD 2,038,758, ambang 3.5). Baseline: vendor.",
     "provenance": {
       "generated_by": "Agent_3_Final_Review",
-      "tools_used": [
-        "calculate_z_score",
-        "check_transaction_timing",
-        "compare_category_baseline",
-        "find_duplicate_expenses",
-        "get_sales_trend",
-        "get_transaction_details",
-        "get_vendor_history",
-        "get_vendor_transaction_history"
-      ],
-      "scored_by": "python_scoring_engine"
+      "tools_used": [],
+      "scored_by": "python_scoring_engine",
+      "llm_model": "models/gemini-3.5-flash"
     },
     "evidence": {
       "objective": [
@@ -231,108 +232,21 @@
           }
         }
       ],
-      "semantic": [
-        {
-          "source": "get_transaction_details",
-          "insight": "Deskripsi transaksi mencatat kebutuhan penambahan kapasitas server dan lisensi untuk menopang lonjakan order."
-        },
-        {
-          "source": "get_sales_trend",
-          "insight": "Revenue bulan Juni 2026 mengalami pertumbuhan masif sebesar +43.39% (Rp 1.17 miliar vs Rp 816 juta), memvalidasi kebutuhan eskalasi infrastruktur TI."
-        },
-        {
-          "source": "compare_category_baseline",
-          "insight": "Meskipun nominal 120 juta melampaui rata-rata kategori IT Services, eskalasi skala bisnis memberikan justifikasi operasional yang sah."
-        }
-      ]
+      "context": [],
+      "semantic": []
     },
     "agent_results": {
       "agent1": {
-        "finding": "Transaksi ID 206 sebesar Rp 120.000.000 dicatat oleh Yogi Ferdiansyah pada jam kerja normal (Jumat, 14:20 WIB) untuk vendor PT. Solusi Teknologi Makmur. Meskipun vendor ini tergolong vendor lama (established) dengan total 19 transaksi, nominal transaksi ini menunjukkan lonjakan anomali yang sangat ekstrem dengan modified Z-Score sebesar 36.26 jauh melampaui ambang batas normal (3.5) dibandingkan dengan median transaksi bulanan vendor yang berkisar Rp 10.407.977.",
-        "provenance": {
-          "generated_by": "Agent_1_Financial_Analytics",
-          "tools_used": [
-            "get_transaction_details",
-            "calculate_z_score",
-            "check_transaction_timing",
-            "get_vendor_transaction_history"
-          ]
-        },
-        "evidence": {
-          "objective": [
-            {
-              "metric": "z_score",
-              "value": 36.26,
-              "status": "anomali_ekstrim"
-            },
-            {
-              "metric": "timing",
-              "value": "14:20:00",
-              "status": "jam_kerja_normal"
-            },
-            {
-              "metric": "vendor_history",
-              "value": "established_vendor",
-              "status": "histori_tercatat"
-            }
-          ]
-        }
+        "_failed": true,
+        "error": "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-3.5-flash\\nPlease retry in 49.423419409s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '49s'}]}}"
       },
       "agent2": {
-        "finding": "Investigasi terhadap transaksi ID 206 tidak menemukan indikasi pola penipuan atau split payment. Tidak ada transaksi duplikat dengan nominal sama ke vendor yang sama dalam rentang 24 jam. Vendor PT. Solusi Teknologi Makmur merupakan vendor terverifikasi (established_vendor) dengan riwayat 19 transaksi dan tanpa catatan risiko.",
-        "provenance": {
-          "generated_by": "Agent_2_Fraud_Investigator",
-          "tools_used": [
-            "get_transaction_details",
-            "find_duplicate_expenses",
-            "get_vendor_history"
-          ]
-        },
-        "evidence": {
-          "objective": [
-            {
-              "metric": "duplicate_transaction",
-              "value": "0 duplikat ditemukan",
-              "status": "tidak ada indikasi split payment"
-            },
-            {
-              "metric": "vendor_history",
-              "value": "established_vendor",
-              "status": "normal"
-            }
-          ]
-        }
+        "_failed": true,
+        "error": "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-3.5-flash\\nPlease retry in 48.542498255s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '48s'}]}}"
       },
       "agent3": {
-        "finding": "Evaluasi lanjutan pada transaksi ID 206 sebesar Rp 120.000.000 untuk PT. Solusi Teknologi Makmur (IT Services) menunjukkan adanya counter-evidence yang kuat. Deskripsi transaksi mengindikasikan 'Penambahan kapasitas server dan lisensi untuk menopang lonjakan order', yang terverifikasi valid karena data penjualan (sales trend) pada bulan Juni 2026 menunjukkan lonjakan revenue yang signifikan sebesar +43.39% (mencapai Rp 1.17 miliar dibanding Rp 816 juta pada bulan sebelumnya). Meskipun secara statistik transaksi ini merupakan outlier ekstrem (Z-score 36.26 terhadap vendor dan 45.35 terhadap kategori) dan dicatat oleh staf finance, peningkatan biaya infrastruktur TI ini sangat selaras dan terjustifikasi oleh kebutuhan operasional nyata untuk menopang lonjakan volume order yang tinggi.",
-        "provenance": {
-          "generated_by": "Agent_3_Evidence_Review",
-          "tools_used": [
-            "get_transaction_details",
-            "compare_category_baseline",
-            "get_sales_trend"
-          ]
-        },
-        "evidence": {
-          "semantic": [
-            {
-              "source": "get_transaction_details",
-              "insight": "Deskripsi transaksi mencatat kebutuhan penambahan kapasitas server dan lisensi untuk menopang lonjakan order."
-            },
-            {
-              "source": "get_sales_trend",
-              "insight": "Revenue bulan Juni 2026 mengalami pertumbuhan masif sebesar +43.39% (Rp 1.17 miliar vs Rp 816 juta), memvalidasi kebutuhan eskalasi infrastruktur TI."
-            },
-            {
-              "source": "compare_category_baseline",
-              "insight": "Meskipun nominal 120 juta melampaui rata-rata kategori IT Services, eskalasi skala bisnis memberikan justifikasi operasional yang sah."
-            }
-          ]
-        },
-        "scoring": {
-          "llm_semantic_adjustment": -20,
-          "adjustment_reason": "Lonjakan pengeluaran infrastruktur TI sepenuhnya terjustifikasi oleh pertumbuhan revenue perusahaan yang masif sebesar +43.39% pada bulan yang sama untuk menopang lonjakan order."
-        }
+        "_failed": true,
+        "error": "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-3.5-flash\\nPlease retry in 39.33994219s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '39s'}]}}"
       }
     },
     "scoring": {
@@ -368,32 +282,26 @@
         }
       ],
       "suppressed_triggers": [],
-      "llm_semantic_adjustment": -20,
-      "adjustment_reason": "Lonjakan pengeluaran infrastruktur TI sepenuhnya terjustifikasi oleh pertumbuhan revenue perusahaan yang masif sebesar +43.39% pada bulan yang sama untuk menopang lonjakan order.",
-      "final_risk_score": 30,
-      "risk_level": "Low Risk",
-      "recommendation": "Transaksi wajar. Otomatis disetujui (No Action)."
+      "llm_semantic_adjustment": 0,
+      "adjustment_reason": "",
+      "final_risk_score": 50,
+      "risk_level": "Medium Risk",
+      "recommendation": "Anomali ringan. Dicatat ke dalam audit report bulanan.",
+      "llm_review_failed": true
     }
   },
   {
-    "transaction_id": 220,
+    "transaction_id": 288,
     "related_transaction_ids": [
-      220,
-      221
+      288,
+      289
     ],
-    "finding": "Evaluasi akhir mengonfirmasi validitas temuan Agent 1 dan Agent 2. Transaksi ID 220 (sebesar Rp25.000.000) terkait dengan faktir INV-2026-0731 yang dibayarkan dua kali (split payment/duplikasi) dengan total Rp50.000.000 ke vendor 'CV Fiktif Sukses Makmur' yang berstatus 'high_risk'. Selain itu, transaksi dicatat di luar jam kerja (23:15:00 WIB). Pengecekan tren sales menunjukkan pertumbuhan yang stagnan (+0.97%), sehingga tidak ada justifikasi bisnis yang sah untuk pengeluaran mendadak di luar jam kerja ini. Tidak ditemukan counter-evidence yang meringankan.",
+    "finding": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar. Transaksi tercatat Monday 20-07-2026 23:15 WIB, di luar jam kerja (Senin-Jumat 08:00-17:59). Faktur INV-2026-0731 dibayar 2 kali ke vendor yang sama (total 50,000,000). Pembayaran pada 2026-07-20 23:15, 2026-07-21 01:15 WIB. Vendor CV Fiktif Sukses Makmur berstatus 'high_risk' di master data.",
     "provenance": {
       "generated_by": "Agent_3_Final_Review",
-      "tools_used": [
-        "calculate_z_score",
-        "check_transaction_timing",
-        "find_duplicate_expenses",
-        "get_sales_trend",
-        "get_transaction_details",
-        "get_vendor_history",
-        "get_vendor_transaction_history"
-      ],
-      "scored_by": "python_scoring_engine"
+      "tools_used": [],
+      "scored_by": "python_scoring_engine",
+      "llm_model": "models/gemini-3.5-flash"
     },
     "evidence": {
       "objective": [
@@ -402,7 +310,7 @@
           "points": 0,
           "owner": "agent_1_financial",
           "amplifier_only": true,
-          "narrative": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar.",
+          "narrative": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar.",
           "detail": {
             "scope": "none",
             "method": "insufficient_baseline",
@@ -413,7 +321,7 @@
             "computed_value": null,
             "confidence": "none",
             "is_anomaly": false,
-            "message": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar."
+            "message": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar."
           }
         },
         {
@@ -441,8 +349,8 @@
             "match_count": 2,
             "total_amount": 50000000.0,
             "transaction_ids": [
-              220,
-              221
+              288,
+              289
             ]
           }
         },
@@ -460,99 +368,21 @@
           }
         }
       ],
-      "semantic": [
-        {
-          "source": "get_sales_trend",
-          "insight": "Pertumbuhan sales pada Juli 2026 tercatat stagnan (0.97%), sehingga tidak mendukung klaim lonjakan kebutuhan operasional mendadak."
-        },
-        {
-          "source": "get_transaction_details",
-          "insight": "Transaksi dikonfirmasi sebagai duplikasi faktir INV-2026-0731 dengan vendor berstatus high_risk di luar jam kerja."
-        }
-      ]
+      "context": [],
+      "semantic": []
     },
     "agent_results": {
       "agent1": {
-        "finding": "Investigasi transaksi ID 220 menunjukkan beberapa indikator mencurigakan: dicatat di luar jam kerja (pukul 23:15:00 WIB), vendor tercatat dengan status high_risk (CV Fiktif Sukses Makmur), dan data historis vendor tidak mencukupi untuk analisis baseline statistik mendalam.",
-        "provenance": {
-          "generated_by": "Agent_1_Financial_Analytics",
-          "tools_used": [
-            "get_transaction_details",
-            "calculate_z_score",
-            "get_vendor_transaction_history",
-            "check_transaction_timing"
-          ]
-        },
-        "evidence": {
-          "objective": [
-            {
-              "metric": "z_score",
-              "value": 0.0,
-              "status": "insufficient_data"
-            },
-            {
-              "metric": "timing",
-              "value": "23:15:00",
-              "status": "outside_hours"
-            },
-            {
-              "metric": "vendor_history",
-              "value": "high_risk",
-              "status": "mencurigakan"
-            }
-          ]
-        }
+        "_failed": true,
+        "error": "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-3.5-flash\\nPlease retry in 28.314139164s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '28s'}]}}"
       },
       "agent2": {
-        "finding": "Investigasi transaksi ID 220 menunjukkan indikasi kuat penipuan berupa transaksi ganda (duplikasi / split payment) dengan nominal persis Rp25.000.000 ke vendor yang sama (CV Fiktif Sukses Makmur) dalam rentang waktu berdekatan. Vendor ini tercatat berstatus 'new_vendor' dengan tingkat risiko tinggi (high_risk/risk_flag true) dan riwayat transaksi yang sangat minim, mengindikasikan potensi vendor fiktif.",
-        "provenance": {
-          "generated_by": "Agent_2_Fraud_Investigator",
-          "tools_used": [
-            "get_transaction_details",
-            "find_duplicate_expenses",
-            "get_vendor_history"
-          ]
-        },
-        "evidence": {
-          "objective": [
-            {
-              "metric": "duplicate_transaction",
-              "value": "2 ditemukan",
-              "status": "indikasi split payment"
-            },
-            {
-              "metric": "vendor_history",
-              "value": "new_vendor",
-              "status": "mencurigakan"
-            }
-          ]
-        }
+        "_failed": true,
+        "error": "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-3.5-flash\\nPlease retry in 31.260878823s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '31s'}]}}"
       },
       "agent3": {
-        "finding": "Evaluasi akhir mengonfirmasi validitas temuan Agent 1 dan Agent 2. Transaksi ID 220 (sebesar Rp25.000.000) terkait dengan faktir INV-2026-0731 yang dibayarkan dua kali (split payment/duplikasi) dengan total Rp50.000.000 ke vendor 'CV Fiktif Sukses Makmur' yang berstatus 'high_risk'. Selain itu, transaksi dicatat di luar jam kerja (23:15:00 WIB). Pengecekan tren sales menunjukkan pertumbuhan yang stagnan (+0.97%), sehingga tidak ada justifikasi bisnis yang sah untuk pengeluaran mendadak di luar jam kerja ini. Tidak ditemukan counter-evidence yang meringankan.",
-        "provenance": {
-          "generated_by": "Agent_3_Evidence_Review",
-          "tools_used": [
-            "get_transaction_details",
-            "get_sales_trend"
-          ]
-        },
-        "evidence": {
-          "semantic": [
-            {
-              "source": "get_sales_trend",
-              "insight": "Pertumbuhan sales pada Juli 2026 tercatat stagnan (0.97%), sehingga tidak mendukung klaim lonjakan kebutuhan operasional mendadak."
-            },
-            {
-              "source": "get_transaction_details",
-              "insight": "Transaksi dikonfirmasi sebagai duplikasi faktir INV-2026-0731 dengan vendor berstatus high_risk di luar jam kerja."
-            }
-          ]
-        },
-        "scoring": {
-          "llm_semantic_adjustment": 0,
-          "adjustment_reason": "Tidak ada counter-evidence atau pembenaran bisnis yang valid; seluruh indikator risiko tinggi dari Agent 1 dan Agent 2 terkonfirmasi kuat."
-        }
+        "_failed": true,
+        "error": "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-3.5-flash\\nPlease retry in 20.714658312s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '20s'}]}}"
       }
     },
     "scoring": {
@@ -576,7 +406,7 @@
           "points": 0,
           "owner": "agent_1_financial",
           "amplifier_only": true,
-          "narrative": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar.",
+          "narrative": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar.",
           "detail": {
             "scope": "none",
             "method": "insufficient_baseline",
@@ -587,7 +417,7 @@
             "computed_value": null,
             "confidence": "none",
             "is_anomaly": false,
-            "message": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar."
+            "message": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar."
           }
         },
         {
@@ -615,8 +445,8 @@
             "match_count": 2,
             "total_amount": 50000000.0,
             "transaction_ids": [
-              220,
-              221
+              288,
+              289
             ]
           }
         },
@@ -642,31 +472,32 @@
         }
       ],
       "llm_semantic_adjustment": 0,
-      "adjustment_reason": "Tidak ada counter-evidence atau pembenaran bisnis yang valid; seluruh indikator risiko tinggi dari Agent 1 dan Agent 2 terkonfirmasi kuat.",
+      "adjustment_reason": "",
       "final_risk_score": 80,
       "risk_level": "Critical Risk",
-      "recommendation": "Indikasi fraud fatal. Eskalasi darurat ke Manajer/CFO."
+      "recommendation": "Indikasi fraud fatal. Eskalasi darurat ke Manajer/CFO.",
+      "llm_review_failed": true
     }
   },
   {
-    "transaction_id": 222,
+    "transaction_id": 290,
     "related_transaction_ids": [
-      222,
-      223,
-      224
+      290,
+      291,
+      292
     ],
-    "finding": "Evaluasi akhir terhadap transaksi ID 222 sebesar Rp24.000.000 (serta transaksi terkait ID 223 dan 224) di PT Konsultan Bayangan mengonfirmasi adanya pola pemecahan pembayaran (split payment) di bawah batas persetujuan Rp25.000.000 dengan total mencapai Rp72.000.000 dalam rentang waktu singkat. Selain itu, terdapat anomali kronologis yang fatal di mana transaksi tercatat pada tanggal 2026-06-22, namun vendor baru terdaftar di sistem pada tanggal 2026-08-08. Tidak ditemukan counter-evidence atau pembenaran bisnis yang sah untuk membatalkan indikasi kecurangan ini. Oleh karena itu, skor risiko tetap dipertahankan tinggi tanpa adanya adjustment negatif.",
+    "finding": "Verifikasi mengonfirmasi adanya indikasi kuat pemecahan pembayaran (split payment) dan bypass otorisasi (role bypass) pada Transaksi ID 290. Ditemukan tiga transaksi dengan nominal identik masing-masing Rp24.000.000 (total Rp72.000.000) kepada PT Konsultan Bayangan dalam rentang waktu 5 hari (22-26 Juni 2026). Setiap transaksi sengaja dipecah agar berada tepat di bawah ambang batas persetujuan Rp25.000.000 untuk menghindari persetujuan Lead, dan diinput oleh Test Staff (finance_staff). Meskipun data penjualan menunjukkan pertumbuhan revenue sebesar 43,39% pada Juni 2026 (menjadi Rp1.170.080.000), lonjakan total pengeluaran bulanan melonjak hingga 312% (mencapai Rp256.204.917,15), yang tidak sebanding dengan pertumbuhan revenue. Selain itu, PT Konsultan Bayangan merupakan vendor baru tanpa rekam jejak historis lain. Direkomendasikan untuk melakukan audit investigatif menyeluruh terhadap transaksi ini dan menangguhkan pembayaran lebih lanjut kepada vendor tersebut.",
     "provenance": {
       "generated_by": "Agent_3_Final_Review",
       "tools_used": [
-        "calculate_z_score",
-        "check_transaction_timing",
-        "find_duplicate_expenses",
-        "get_transaction_details",
-        "get_vendor_history",
+        "compare_category_baseline",
+        "get_monthly_expense_trend",
+        "get_sales_trend",
+        "get_user_spending_pattern",
         "get_vendor_transaction_history"
       ],
-      "scored_by": "python_scoring_engine"
+      "scored_by": "python_scoring_engine",
+      "llm_model": "models/gemini-3.5-flash"
     },
     "evidence": {
       "objective": [
@@ -675,7 +506,7 @@
           "points": 0,
           "owner": "agent_1_financial",
           "amplifier_only": true,
-          "narrative": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar.",
+          "narrative": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar.",
           "detail": {
             "scope": "none",
             "method": "insufficient_baseline",
@@ -686,7 +517,7 @@
             "computed_value": null,
             "confidence": "none",
             "is_anomaly": false,
-            "message": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar."
+            "message": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar."
           }
         },
         {
@@ -703,9 +534,9 @@
             "match_count": 3,
             "total_amount": 72000000.0,
             "transaction_ids": [
-              222,
-              223,
-              224
+              290,
+              291,
+              292
             ],
             "invoice_numbers": [
               "INV-2026-0601",
@@ -726,89 +557,122 @@
           }
         }
       ],
+      "context": [
+        {
+          "source": "get_vendor_transaction_history",
+          "insight": "PT Konsultan Bayangan (vendor_id 6) baru terdaftar pada 23 Mei 2026 dan hanya memiliki total 3 transaksi yang semuanya bernilai Rp24.000.000 (total Rp72.000.000) untuk pembayaran jasa konsultasi Tahap 1 (22 Juni), Tahap 2 (24 Juni), dan Tahap 3 (26 Juni) dalam kurun waktu 5 hari."
+        },
+        {
+          "source": "compare_category_baseline",
+          "insight": "Kategori 'Consulting' hanya memiliki 4 sampel transaksi dengan rata-rata Rp24.500.000, di mana 3 di antaranya adalah transaksi dari PT Konsultan Bayangan ini, sehingga analisis deviasi statistik tidak representatif."
+        },
+        {
+          "source": "get_monthly_expense_trend",
+          "insight": "Terdapat lonjakan pengeluaran bulanan yang sangat besar pada Juni 2026 mencapai Rp256.204.917,15 (19 transaksi) dibandingkan Mei 2026 sebesar Rp62.161.440,69 (14 transaksi). Pembayaran ke vendor ini berkontribusi signifikan terhadap lonjakan tersebut."
+        },
+        {
+          "source": "get_user_spending_pattern",
+          "insight": "User Test Staff (ID 10) memiliki rata-rata transaksi normal sebesar Rp6.512.999,77. Tiga transaksi senilai Rp24.000.000,00 ini merupakan nilai transaksi maksimum (max_amount) yang pernah diinput oleh user tersebut, menunjukkan adanya penyimpangan pola pengeluaran yang sangat tidak biasa demi mendekati batas limit persetujuan."
+        },
+        {
+          "source": "get_vendor_transaction_history",
+          "insight": "PT Konsultan Bayangan (ID 6) merupakan vendor yang tidak memiliki rekam jejak transaksi historis lain. Seluruh aktivitas transaksi vendor ini (total 3 transaksi dengan akumulasi Rp72.000.000,00) hanya terdiri dari tiga pembayaran pecahan Rp24.000.000,00 yang diinput oleh Test Staff dalam rentang waktu 5 hari (22-26 Juni 2026). Tidak ada konteks yang meringankan; temuan ini justru memperkuat indikasi kolusi atau manipulasi pembuatan transaksi."
+        }
+      ],
       "semantic": [
         {
-          "source": "get_transaction_details",
-          "insight": "Transaksi tercatat sebelum vendor resmi terdaftar (backdating) dan membentuk pola split payment di bawah limit persetujuan."
+          "source": "get_sales_trend",
+          "insight": "Revenue pada bulan Juni 2026 tumbuh sebesar 43.39% menjadi Rp1.170.080.000 dari Rp816.000.000 pada bulan sebelumnya."
+        },
+        {
+          "source": "get_monthly_expense_trend",
+          "insight": "Total pengeluaran pada bulan Juni 2026 melonjak tajam sebesar 312% menjadi Rp256.204.917,15 dari Rp62.161.440,69 pada bulan Mei 2026, menunjukkan pertumbuhan biaya yang tidak proporsional dengan pertumbuhan revenue."
+        },
+        {
+          "source": "compare_category_baseline",
+          "insight": "Kategori Consulting memiliki rata-rata Rp24.500.000 dengan ukuran sampel yang sangat kecil (4 transaksi), di mana 3 di antaranya merupakan transaksi dari PT Konsultan Bayangan, sehingga baseline tidak mencukupi secara statistik."
         }
       ]
     },
     "agent_results": {
       "agent1": {
-        "finding": "Transaksi ID 222 sebesar Rp24.000.000 untuk PT Konsultan Bayangan dicatat pada jam kerja normal (Senin, 10:15 WIB). Pengujian Z-Score menunjukkan data baseline tidak mencukupi untuk penilaian statistik yang valid. Vendor tercatat memiliki total 3 transaksi dengan nominal identik masing-masing Rp24.000.000 untuk pembayaran konsultasi bertahap.",
+        "finding": "Transaksi ID 290 senilai Rp24.000.000 untuk 'Pembayaran jasa konsultasi tahap 1' kepada PT Konsultan Bayangan tidak dapat dinilai secara statistik karena keterbatasan data pembanding (insufficient baseline: vendor hanya memiliki 2 transaksi pembanding dan kategori Consulting hanya memiliki 4 transaksi). Namun, analisis konteks menemukan indikasi ketidakwajaran yang signifikan: terdapat tiga transaksi beruntun dengan nominal identik (masing-masing Rp24.000.000, total Rp72.000.000) untuk pembayaran Tahap 1, 2, dan 3 yang dilakukan dalam rentang waktu hanya 5 hari (22, 24, dan 26 Juni 2026). Akumulasi transaksi ini menyumbang sekitar 28% dari total pengeluaran bulan Juni 2026 yang melonjak tajam menjadi Rp256.204.917,15 (naik dari Rp62.161.440,69 pada bulan Mei). Pola pembayaran termin yang sangat cepat dan berdekatan ini tidak lazim untuk jasa konsultasi profesional.",
         "provenance": {
           "generated_by": "Agent_1_Financial_Analytics",
           "tools_used": [
-            "get_transaction_details",
-            "calculate_z_score",
             "get_vendor_transaction_history",
-            "check_transaction_timing"
+            "compare_category_baseline",
+            "get_monthly_expense_trend"
           ]
         },
         "evidence": {
-          "objective": [
+          "context": [
             {
-              "metric": "z_score",
-              "value": null,
-              "status": "insufficient_baseline"
+              "source": "get_vendor_transaction_history",
+              "insight": "PT Konsultan Bayangan (vendor_id 6) baru terdaftar pada 23 Mei 2026 dan hanya memiliki total 3 transaksi yang semuanya bernilai Rp24.000.000 (total Rp72.000.000) untuk pembayaran jasa konsultasi Tahap 1 (22 Juni), Tahap 2 (24 Juni), dan Tahap 3 (26 Juni) dalam kurun waktu 5 hari."
             },
             {
-              "metric": "timing",
-              "value": "10:15:00",
-              "status": "normal"
+              "source": "compare_category_baseline",
+              "insight": "Kategori 'Consulting' hanya memiliki 4 sampel transaksi dengan rata-rata Rp24.500.000, di mana 3 di antaranya adalah transaksi dari PT Konsultan Bayangan ini, sehingga analisis deviasi statistik tidak representatif."
             },
             {
-              "metric": "vendor_history",
-              "value": "3 transactions",
-              "status": "established_vendor"
+              "source": "get_monthly_expense_trend",
+              "insight": "Terdapat lonjakan pengeluaran bulanan yang sangat besar pada Juni 2026 mencapai Rp256.204.917,15 (19 transaksi) dibandingkan Mei 2026 sebesar Rp62.161.440,69 (14 transaksi). Pembayaran ke vendor ini berkontribusi signifikan terhadap lonjakan tersebut."
             }
           ]
         }
       },
       "agent2": {
-        "finding": "Investigasi menunjukkan tidak ada transaksi duplikat (split payment) yang terdeteksi untuk nominal 24.000.000 pada vendor PT Konsultan Bayangan. Namun, ditemukan anomali kronologis yang sangat mencurigakan: transaksi dilakukan pada 2026-06-22, sedangkan vendor baru terdaftar di sistem pada 2026-08-08. Hal ini mengindikasikan adanya potensi transaksi fiktif atau manipulasi data (backdating).",
+        "finding": "Terdeteksi pola pemecahan pembayaran (split payment) dan bypass otorisasi (role bypass) pada transaksi ID 290. Ditemukan adanya 3 transaksi pembayaran jasa konsultasi kepada PT Konsultan Bayangan dengan nilai masing-masing Rp24.000.000,00 (total Rp72.000.000,00) menggunakan nomor faktur berbeda (INV-2026-0601, INV-2026-0602, INV-2026-0603) dalam kurun waktu 7 hari. Tindakan ini melanggar kontrol persetujuan internal karena transaksi sengaja dipecah agar nilainya berada tepat di bawah ambang batas persetujuan (approval threshold) sebesar Rp25.000.000,00, sehingga menghindari keharusan mendapatkan persetujuan dari Lead. Transaksi ini diinput oleh Test Staff (finance_staff) yang merupakan pihak yang seharusnya dibatasi oleh kontrol otorisasi tersebut.",
         "provenance": {
           "generated_by": "Agent_2_Fraud_Investigator",
           "tools_used": [
-            "get_transaction_details",
-            "find_duplicate_expenses",
-            "get_vendor_history"
+            "get_user_spending_pattern",
+            "get_vendor_transaction_history"
           ]
         },
         "evidence": {
-          "objective": [
+          "context": [
             {
-              "metric": "duplicate_transaction",
-              "value": "0 ditemukan",
-              "status": "aman"
+              "source": "get_user_spending_pattern",
+              "insight": "User Test Staff (ID 10) memiliki rata-rata transaksi normal sebesar Rp6.512.999,77. Tiga transaksi senilai Rp24.000.000,00 ini merupakan nilai transaksi maksimum (max_amount) yang pernah diinput oleh user tersebut, menunjukkan adanya penyimpangan pola pengeluaran yang sangat tidak biasa demi mendekati batas limit persetujuan."
             },
             {
-              "metric": "vendor_registration_anomaly",
-              "value": "transaksi mendahului pendaftaran vendor",
-              "status": "sangat mencurigakan"
+              "source": "get_vendor_transaction_history",
+              "insight": "PT Konsultan Bayangan (ID 6) merupakan vendor yang tidak memiliki rekam jejak transaksi historis lain. Seluruh aktivitas transaksi vendor ini (total 3 transaksi dengan akumulasi Rp72.000.000,00) hanya terdiri dari tiga pembayaran pecahan Rp24.000.000,00 yang diinput oleh Test Staff dalam rentang waktu 5 hari (22-26 Juni 2026). Tidak ada konteks yang meringankan; temuan ini justru memperkuat indikasi kolusi atau manipulasi pembuatan transaksi."
             }
           ]
         }
       },
       "agent3": {
-        "finding": "Evaluasi akhir terhadap transaksi ID 222 sebesar Rp24.000.000 (serta transaksi terkait ID 223 dan 224) di PT Konsultan Bayangan mengonfirmasi adanya pola pemecahan pembayaran (split payment) di bawah batas persetujuan Rp25.000.000 dengan total mencapai Rp72.000.000 dalam rentang waktu singkat. Selain itu, terdapat anomali kronologis yang fatal di mana transaksi tercatat pada tanggal 2026-06-22, namun vendor baru terdaftar di sistem pada tanggal 2026-08-08. Tidak ditemukan counter-evidence atau pembenaran bisnis yang sah untuk membatalkan indikasi kecurangan ini. Oleh karena itu, skor risiko tetap dipertahankan tinggi tanpa adanya adjustment negatif.",
+        "finding": "Verifikasi mengonfirmasi adanya indikasi kuat pemecahan pembayaran (split payment) dan bypass otorisasi (role bypass) pada Transaksi ID 290. Ditemukan tiga transaksi dengan nominal identik masing-masing Rp24.000.000 (total Rp72.000.000) kepada PT Konsultan Bayangan dalam rentang waktu 5 hari (22-26 Juni 2026). Setiap transaksi sengaja dipecah agar berada tepat di bawah ambang batas persetujuan Rp25.000.000 untuk menghindari persetujuan Lead, dan diinput oleh Test Staff (finance_staff). Meskipun data penjualan menunjukkan pertumbuhan revenue sebesar 43,39% pada Juni 2026 (menjadi Rp1.170.080.000), lonjakan total pengeluaran bulanan melonjak hingga 312% (mencapai Rp256.204.917,15), yang tidak sebanding dengan pertumbuhan revenue. Selain itu, PT Konsultan Bayangan merupakan vendor baru tanpa rekam jejak historis lain. Direkomendasikan untuk melakukan audit investigatif menyeluruh terhadap transaksi ini dan menangguhkan pembayaran lebih lanjut kepada vendor tersebut.",
         "provenance": {
           "generated_by": "Agent_3_Evidence_Review",
           "tools_used": [
-            "get_transaction_details"
+            "get_sales_trend",
+            "compare_category_baseline",
+            "get_monthly_expense_trend"
           ]
         },
         "evidence": {
           "semantic": [
             {
-              "source": "get_transaction_details",
-              "insight": "Transaksi tercatat sebelum vendor resmi terdaftar (backdating) dan membentuk pola split payment di bawah limit persetujuan."
+              "source": "get_sales_trend",
+              "insight": "Revenue pada bulan Juni 2026 tumbuh sebesar 43.39% menjadi Rp1.170.080.000 dari Rp816.000.000 pada bulan sebelumnya."
+            },
+            {
+              "source": "get_monthly_expense_trend",
+              "insight": "Total pengeluaran pada bulan Juni 2026 melonjak tajam sebesar 312% menjadi Rp256.204.917,15 dari Rp62.161.440,69 pada bulan Mei 2026, menunjukkan pertumbuhan biaya yang tidak proporsional dengan pertumbuhan revenue."
+            },
+            {
+              "source": "compare_category_baseline",
+              "insight": "Kategori Consulting memiliki rata-rata Rp24.500.000 dengan ukuran sampel yang sangat kecil (4 transaksi), di mana 3 di antaranya merupakan transaksi dari PT Konsultan Bayangan, sehingga baseline tidak mencukupi secara statistik."
             }
           ]
         },
         "scoring": {
           "llm_semantic_adjustment": 0,
-          "adjustment_reason": "Tidak ada counter-evidence atau penjelasan bisnis yang sah untuk membantah anomali pendaftaran vendor dan pola split payment."
+          "adjustment_reason": "Meskipun revenue tumbuh sebesar 43.39%, lonjakan pengeluaran bulanan yang mencapai 312% dan pola split payment yang sangat jelas untuk menghindari batas otorisasi Rp25.000.000 tidak memberikan pembenaran bisnis yang sah. Skor penalti objektif dipertahankan sepenuhnya."
         }
       }
     },
@@ -833,7 +697,7 @@
           "points": 0,
           "owner": "agent_1_financial",
           "amplifier_only": true,
-          "narrative": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar.",
+          "narrative": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar.",
           "detail": {
             "scope": "none",
             "method": "insufficient_baseline",
@@ -844,7 +708,7 @@
             "computed_value": null,
             "confidence": "none",
             "is_anomaly": false,
-            "message": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik — ini BUKAN pernyataan bahwa transaksi ini wajar."
+            "message": "Baseline tidak mencukupi: vendor punya 2 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar."
           }
         },
         {
@@ -861,9 +725,9 @@
             "match_count": 3,
             "total_amount": 72000000.0,
             "transaction_ids": [
-              222,
-              223,
-              224
+              290,
+              291,
+              292
             ],
             "invoice_numbers": [
               "INV-2026-0601",
@@ -886,7 +750,7 @@
       ],
       "suppressed_triggers": [],
       "llm_semantic_adjustment": 0,
-      "adjustment_reason": "Tidak ada counter-evidence atau penjelasan bisnis yang sah untuk membantah anomali pendaftaran vendor dan pola split payment.",
+      "adjustment_reason": "Meskipun revenue tumbuh sebesar 43.39%, lonjakan pengeluaran bulanan yang mencapai 312% dan pola split payment yang sangat jelas untuk menghindari batas otorisasi Rp25.000.000 tidak memberikan pembenaran bisnis yang sah. Skor penalti objektif dipertahankan sepenuhnya.",
       "final_risk_score": 60,
       "risk_level": "High Risk",
       "recommendation": "Indikasi kecurangan. Butuh verifikasi manual (Manual Review)."

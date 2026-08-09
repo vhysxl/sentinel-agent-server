@@ -266,6 +266,26 @@ def seed():
 
         cases["A"]["revenue_month"] = a_month
         cases["D"]["revenue_month"] = d_month
+
+        # Vendor harus terdaftar SEBELUM transaksi pertamanya.
+        #
+        # Tanpa ini setiap vendor punya join_date = saat seed dijalankan,
+        # sementara transaksinya dimundurkan berbulan-bulan — sehingga seluruh
+        # data terlihat seperti "transaksi mendahului pendaftaran vendor".
+        # Agent 2 menemukan ini dan menandainya "sangat mencurigakan"; ia benar,
+        # datanyalah yang salah. Diperbaiki di sumbernya, bukan disembunyikan
+        # dari tool, supaya kalau pola ini muncul di data nyata ia tetap terbaca
+        # sebagai anomali.
+        db.execute(text("""
+            UPDATE vendors v
+            SET join_date = sub.first_tx - INTERVAL '30 days'
+            FROM (
+                SELECT vendor_id, MIN(transaction_date) AS first_tx
+                FROM transactions WHERE vendor_id IS NOT NULL
+                GROUP BY vendor_id
+            ) sub
+            WHERE v.id = sub.vendor_id
+        """))
         db.commit()
 
         total = db.execute(text("SELECT count(*) FROM transactions")).scalar()
