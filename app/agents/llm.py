@@ -22,7 +22,7 @@ import random
 import sys
 import time
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, find_dotenv, load_dotenv
 from google import genai
 from google.genai import types
 
@@ -57,11 +57,34 @@ def pinned_model(agent: str | None = None) -> str:
     penilaian LLM. Agent 1 dan 2 hanya menarasikan dan menyelidiki, jadi model
     ringan memadai; Agent 3 memutuskan angka, dan itu butuh model yang lebih kuat.
     """
-    load_dotenv(override=True)
-    base = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+    base = _model_setting("GEMINI_MODEL") or DEFAULT_MODEL
     if agent == "agent3":
-        return os.environ.get("GEMINI_MODEL_AGENT3", base)
+        return _model_setting("GEMINI_MODEL_AGENT3") or base
     return base
+
+
+def _model_setting(key: str) -> str | None:
+    """
+    Membaca setelan model LANGSUNG dari berkas .env, bukan dari os.environ.
+
+    `load_dotenv(override=True)` hanya MENIMPA kunci yang ada di berkas; ia tidak
+    pernah MENGHAPUS kunci yang sudah telanjur masuk os.environ. Akibatnya
+    mengomentari atau menghapus sebuah baris di .env tidak berpengaruh sama
+    sekali pada proses yang sedang berjalan — ia terus memakai nilai lama.
+
+    Itu bukan teori: setelah GEMINI_MODEL_AGENT3 dikomentari, server yang sedang
+    hidup tetap memanggil model lama dan Agent 3 terus gagal 429, sementara
+    proses baru membaca nilai yang benar. Membingungkan justru karena keduanya
+    "benar" menurut sumbernya masing-masing.
+
+    Dengan membaca berkasnya langsung, mengomentari sebuah baris berperilaku
+    seperti yang diharapkan. os.environ hanya dipakai kalau .env tidak ada
+    (mis. saat dijalankan di container dengan env var sungguhan).
+    """
+    path = find_dotenv(usecwd=True)
+    if path:
+        return dotenv_values(path).get(key)
+    return os.environ.get(key)
 
 
 def _is_transient(error: Exception) -> bool:
