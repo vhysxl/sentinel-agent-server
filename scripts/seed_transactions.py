@@ -9,7 +9,7 @@ ATURAN KERAS
    menghapus seluruh akun login.)
 2. `vendors` lama tidak pernah dihapus. Vendor baru hanya ditambahkan kalau
    namanya belum ada.
-3. Hanya `transactions` dan `monthly_revenue` yang dikosongkan lalu diisi ulang,
+3. Hanya `transactions` yang dikosongkan lalu diisi ulang,
    sehingga skrip ini dapat dijalankan berulang dengan hasil identik.
 4. Semua waktu SADAR-ZONA WIB. created_at bertipe timestamptz dan server
    database ber-timezone GMT; menulis waktu naif akan bergeser 7 jam.
@@ -121,13 +121,12 @@ def seed():
                 f"tidak membuat user baru. User yang tersedia: {users}"
             )
 
-        print("Mengosongkan transactions & monthly_revenue (users/vendors TIDAK disentuh)...")
+        print("Mengosongkan transactions (users/vendors TIDAK disentuh)...")
         # Urutannya mengikuti foreign key: yang menunjuk transactions dihapus
         # lebih dulu, baru transactions itu sendiri.
         db.execute(text("DELETE FROM findings"))
         db.execute(text("DELETE FROM transaction_analysis"))
         db.execute(text("DELETE FROM transactions"))
-        db.execute(text("DELETE FROM monthly_revenue"))
         db.commit()
 
         v_atk = get_or_create_vendor(db, "CV. ATK Sejahtera", "active")
@@ -252,7 +251,6 @@ def seed():
         }
 
         # ------------------------------------------------------------------
-        # monthly_revenue — 6 bulan.
         # Bulan Kasus A stagnan (+1%), bulan Kasus D tumbuh (+42%).
         # ------------------------------------------------------------------
         a_month = a_date.strftime("%Y-%m-01")

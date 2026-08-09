@@ -66,12 +66,6 @@ OWNED_TABLES_DDL = [
         CONSTRAINT ta_status_chk CHECK (status IN ('clean','flagged','failed'))
     )
     """,
-    """
-    CREATE TABLE IF NOT EXISTS monthly_revenue (
-        month    DATE PRIMARY KEY,
-        revenue  NUMERIC(15,2) NOT NULL
-    )
-    """,
 ]
 
 # Perubahan pada tabel bersama `transactions`. Lihat PERINGATAN di atas.
@@ -121,10 +115,48 @@ INDEX_DDL = [
 ]
 
 
+def drop_legacy_schema(conn) -> None:
+    """
+    Membuang skema lama, dan HANYA kalau memang skema lama yang ditemukan.
+
+    `findings` dikenali dari kolom `payload` — kolom itu hanya ada di bentuk
+    lama. Pemeriksaannya penting: `DROP TABLE findings` tanpa syarat akan
+    menghapus temuan sungguhan setiap kali migrasi dijalankan, padahal migrasi
+    memang dirancang untuk boleh dijalankan berulang.
+
+    Dua tabel berikutnya dibuang tanpa syarat karena sudah tidak punya pembaca:
+
+    `analysis_runs` — dengan transaction_id unik, run kedua tidak pernah
+    menghasilkan temuan, jadi tabel dan riwayatnya kosong selamanya.
+
+    `monthly_revenue` — pendapatan sekarang dibaca dari transactions
+    (type='income'), sumber yang sama dengan biaya. Dua sumber angka pendapatan
+    berarti satu pertanyaan bisa dijawab dua angka berbeda.
+    """
+    legacy = conn.execute(text("""
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'findings' AND column_name = 'payload'
+        )
+    """)).scalar()
+
+    if legacy:
+        conn.execute(text("DROP TABLE IF EXISTS findings CASCADE"))
+        print("  skema findings lama (kolom payload) dibuang")
+    else:
+        print("  skema findings lama tidak ditemukan, tidak ada yang dibuang")
+
+    conn.execute(text("DROP TABLE IF EXISTS analysis_runs CASCADE"))
+    conn.execute(text("DROP TABLE IF EXISTS monthly_revenue CASCADE"))
+
+
 def run_migrations():
     print("Menghubungkan ke database...")
 
     with engine.begin() as conn:
+        print("\n[0/3] Membersihkan skema lama")
+        drop_legacy_schema(conn)
+
         print("\n[1/3] Tabel milik agent server")
         for ddl in OWNED_TABLES_DDL:
             conn.execute(text(ddl))
@@ -143,7 +175,7 @@ def run_migrations():
     # Laporan akhir supaya hasilnya bisa dilihat, bukan diasumsikan.
     with engine.connect() as conn:
         print("\nHasil:")
-        for table in ("findings", "transaction_analysis", "monthly_revenue"):
+        for table in ("findings", "transaction_analysis"):
             exists = conn.execute(text(
                 "SELECT to_regclass(:t) IS NOT NULL"
             ), {"t": f"public.{table}"}).scalar()

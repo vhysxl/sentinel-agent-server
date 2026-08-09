@@ -98,22 +98,36 @@ REVENUE_BOOM = 1.48       # lonjakan di bulan outlier
 
 def seed_revenue(db, months: list[datetime], boom_month: str | None):
     """
-    Mengisi monthly_revenue untuk seluruh bulan payroll.
+    Menanam PENDAPATAN sebagai transaksi `type='income'`.
 
-    Kalau `boom_month` diberikan, revenue melonjak di bulan itu DAN BERTAHAN
-    di bulan-bulan sesudahnya. Lonjakan yang tidak bertahan akan terbaca sebagai
-    kejatuhan pada bulan berikutnya, dan justru memberatkan transaksi yang
-    seharusnya dibela.
+    Dulu ini mengisi tabel monthly_revenue terpisah. Sejak pendapatan dan biaya
+    dibaca dari sumber yang sama, tabel itu dipensiunkan — kalau tidak, satu
+    pertanyaan bisa dijawab dua angka berbeda.
+
+    Kalau `boom_month` diberikan, pendapatan melonjak di bulan itu DAN BERTAHAN
+    sesudahnya. Lonjakan yang jatuh lagi terbaca sebagai kejatuhan pada bulan
+    berikutnya, dan justru memberatkan transaksi yang seharusnya dibela.
     """
     keys = sorted({m.strftime("%Y-%m-01") for m in months})
     for i, key in enumerate(keys):
         value = REVENUE_BASE * (REVENUE_DRIFT ** i)
         if boom_month and key >= boom_month:
             value *= REVENUE_BOOM
-        db.execute(text("""
-            INSERT INTO monthly_revenue (month, revenue) VALUES (:m, :r)
-            ON CONFLICT (month) DO UPDATE SET revenue = EXCLUDED.revenue
-        """), {"m": key, "r": round(value, 2)})
+
+        month_start = datetime.strptime(key, "%Y-%m-%d").replace(tzinfo=WIB)
+        weights = [random.uniform(0.85, 1.15) for _ in range(3)]
+        for k, w in enumerate(weights):
+            share = value * w / sum(weights)
+            d = to_weekday(month_start.replace(
+                day=min(5 + k * 9, 28), hour=random.randint(9, 16)))
+            db.execute(text("""
+                INSERT INTO transactions
+                    (transaction_date, created_at, amount, type, category,
+                     description, vendor_id, input_by_user_id)
+                VALUES (:d, :d, :a, 'income', 'Sales', :desc, NULL, :u)
+            """), {"d": d, "a": round(share, 2),
+                   "desc": f"Penjualan periode {key[:7]} termin {k + 1}",
+                   "u": random.choice(PAYROLL_INPUTTERS)})
     return keys
 
 
@@ -129,7 +143,6 @@ def seed(outlier_amount: int, boom: bool = False):
         db.execute(text("DELETE FROM findings"))
         db.execute(text("DELETE FROM transaction_analysis"))
         db.execute(text("DELETE FROM transactions"))
-        db.execute(text("DELETE FROM monthly_revenue"))
         db.commit()
 
         # --- 20 payroll bulanan, jam kerja, nominal rapat --------------------

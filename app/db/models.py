@@ -138,14 +138,3 @@ class TransactionAnalysis(Base):
                          server_default=func.now())
     status = Column(String(12), nullable=False)   # clean | flagged | failed
     error = Column(Text, nullable=True)
-
-
-class MonthlyRevenue(Base):
-    """
-    Revenue bulanan, dipakai Agent 3 untuk membatalkan false positive:
-    lonjakan biaya yang sejalan dengan pertumbuhan revenue bukan anomali.
-    """
-    __tablename__ = "monthly_revenue"
-
-    month = Column(Date, primary_key=True)
-    revenue = Column(Numeric(15, 2), nullable=False)
