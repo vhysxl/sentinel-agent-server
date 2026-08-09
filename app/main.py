@@ -14,6 +14,7 @@ tidak pernah menyentuh LLM sama sekali.
 """
 import concurrent.futures
 import json
+from datetime import datetime
 
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,7 +25,9 @@ from sqlalchemy import func, text
 from app.agents.agent1 import run_financial_investigator
 from app.agents.agent2 import run_fraud_investigator
 from app.agents.agent3 import run_evidence_reviewer
+from app.agents.ask import ask_sentinel
 from app.agents.llm import pinned_model
+from app.core.config import WIB
 from app.core.constants import (
     RESOLUTIONS,
     RISK_ACTION,
@@ -59,6 +62,10 @@ app.add_middleware(
 class AnalyzeRequest(BaseModel):
     start_date: str
     end_date: str
+
+
+class AskRequest(BaseModel):
+    question: str
 
 
 class ResolveRequest(BaseModel):
@@ -507,6 +514,45 @@ def summary():
         }
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Ask Sentinel
+# ---------------------------------------------------------------------------
+
+@app.post("/api/ask")
+def ask(request: AskRequest):
+    """
+    Tanya jawab keuangan. Sekali tanya, sekali jawab — tanpa riwayat percakapan.
+
+    Model tidak pernah menerima baris transaksi, dan tidak pernah memanggil tool
+    sendiri: ia memilih tool + periode, Python menjalankannya, lalu model
+    menarasikan angka yang sudah jadi. `figures` dirakit Python dari hasil tool,
+    bukan oleh model.
+    """
+    question = (request.question or "").strip()
+    if not question:
+        return {"error": "Pertanyaan kosong."}
+
+    db = SessionLocal()
+    try:
+        span = db.execute(text("""
+            SELECT to_char(MIN(created_at AT TIME ZONE 'Asia/Jakarta'), 'YYYY-MM'),
+                   to_char(MAX(created_at AT TIME ZONE 'Asia/Jakarta'), 'YYYY-MM')
+            FROM transactions
+        """)).fetchone()
+        data_range = (f"{span[0]} s/d {span[1]}" if span and span[0]
+                      else "belum ada transaksi")
+    finally:
+        db.close()
+
+    result = ask_sentinel(question, datetime.now(WIB).strftime("%d-%m-%Y"), data_range)
+    unsourced = result.get("unsourced_figures") or []
+    return {
+        "question": question, "data_range": data_range, **result,
+        "warning": ("Ada angka di jawaban yang tidak berasal dari hasil query."
+                    if unsourced else None),
+    }
 
 
 # ---------------------------------------------------------------------------

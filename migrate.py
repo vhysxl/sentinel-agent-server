@@ -107,7 +107,12 @@ SHARED_TABLE_DDL = [
 # Indeks pendukung deteksi.
 INDEX_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_tx_vendor_type ON transactions (vendor_id, type)",
-    "CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions (transaction_date)",
+    # Indeks lama menempel di transaction_date — kolom warisan yang tidak pernah
+    # di-query lagi sejak seluruh sistem beralih ke created_at. Setiap agregat
+    # periode memfilter created_at, jadi indeksnya harus di sana.
+    "DROP INDEX IF EXISTS idx_tx_date",
+    "CREATE INDEX IF NOT EXISTS idx_tx_created_at ON transactions (created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_tx_created_type ON transactions (created_at, type)",
     "CREATE INDEX IF NOT EXISTS idx_tx_invoice ON transactions (vendor_id, invoice_no)",
     # Dipakai tiap kali sebuah kandidat memeriksa "pelanggaran ini sudah pernah
     # dilaporkan belum?" lewat operator overlap array (&&).

@@ -257,28 +257,45 @@ def seed():
         # ------------------------------------------------------------------
         a_month = a_date.strftime("%Y-%m-01")
         d_month = d_date.strftime("%Y-%m-01")
-        base = 800_000_000
         months = [(ANCHOR - timedelta(days=30 * (5 - i))).strftime("%Y-%m-01")
                   for i in range(6)]
 
-        # Dasar: tumbuh ~1% per bulan (stagnan). Lalu satu langkah naik +42% di
-        # bulan Kasus D yang BERTAHAN di bulan-bulan berikutnya.
+        # ------------------------------------------------------------------
+        # PENDAPATAN — ditanam sebagai transaksi `type='income'`.
         #
-        # Kenaikan harus bertahan, bukan sekadar puncak sesaat: kalau revenue
-        # turun lagi setelahnya, bulan Kasus A justru terbaca 'declining' dan
-        # kasusnya berubah makna. Yang dibutuhkan Kasus A adalah bulan STAGNAN.
-        revenues = {}
+        # Dulu angka ini hidup di tabel monthly_revenue terpisah, sehingga satu
+        # pertanyaan ("berapa pendapatan Juni?") bisa dijawab dua angka berbeda.
+        # Sekarang satu sumber: pendapatan dan biaya sama-sama dari transactions.
+        #
+        # Kurvanya menentukan Kasus D: bulan D harus tumbuh ~42% dan kenaikannya
+        # BERTAHAN, karena lonjakan yang jatuh lagi membuat bulan Kasus A terbaca
+        # 'declining' dan mengubah artinya.
+        # ------------------------------------------------------------------
+        base_rev = 800_000_000
         for i, m in enumerate(months):
-            value = base + i * 8_000_000
+            target = base_rev + i * 8_000_000
             if m >= d_month:
-                value *= 1.42
-            revenues[m] = round(value, 2)
+                target *= 1.42
 
-        for month, revenue in sorted(revenues.items()):
-            db.execute(text(
-                "INSERT INTO monthly_revenue (month, revenue) VALUES (:m, :r) "
-                "ON CONFLICT (month) DO UPDATE SET revenue = EXCLUDED.revenue"
-            ), {"m": month, "r": revenue})
+            # Dipecah beberapa transaksi supaya menyerupai penjualan sungguhan,
+            # bukan satu angka bulat sekali sebulan.
+            month_start = datetime.strptime(m, "%Y-%m-%d").replace(tzinfo=WIB)
+            parts = 4
+
+            # Bagian dihitung lebih dulu lalu diskalakan supaya totalnya PERSIS
+            # `target`. Kalau tiap baris diacak lalu baris terakhir menutup
+            # selisih, baris terakhir bisa jadi janggal atau bahkan negatif.
+            weights = [random.uniform(0.85, 1.15) for _ in range(parts)]
+            shares = [target * w / sum(weights) for w in weights]
+
+            for k, share in enumerate(shares):
+                d = to_weekday(month_start.replace(
+                    day=min(4 + k * 7, 28), hour=random.randint(9, 16),
+                    minute=random.randint(0, 59)))
+                insert_tx(db, date=d, amount=round(share, 2), ttype="income",
+                          category="Sales",
+                          description=f"Penjualan periode {m[:7]} termin {k + 1}",
+                          vendor_id=None, user_id=random.choice(STAFF_IDS))
 
         cases["A"]["revenue_month"] = a_month
         cases["D"]["revenue_month"] = d_month
@@ -305,7 +322,11 @@ def seed():
         db.commit()
 
         total = db.execute(text("SELECT count(*) FROM transactions")).scalar()
-        print(f"\nSeed selesai: {total} transaksi, {len(revenues)} bulan revenue.")
+        income_n = db.execute(text(
+            "SELECT count(*) FROM transactions WHERE type='income'")).scalar()
+        print(f"\nSeed selesai: {total} transaksi "
+              f"({income_n} pendapatan, {total - income_n} biaya) "
+              f"atas {len(months)} bulan.")
         print(f"  A  z-spike 45jt          tx={cases['A']['transaction_ids']}  bulan={a_month} (stagnan)")
         print(f"  B  duplicate {b_invoice} tx={case_b_ids}")
         print(f"  B2 split 3x24jt          tx={case_b2_ids}")

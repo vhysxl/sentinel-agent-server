@@ -54,59 +54,52 @@ def calculate_z_score(transaction_id: int) -> Dict[str, Any]:
 
 def get_sales_trend(month: str) -> Dict[str, Any]:
     """
-    Mendapatkan pertumbuhan revenue pada bulan tertentu dibanding bulan sebelumnya.
-    Digunakan untuk memverifikasi klaim bahwa pengeluaran besar dibutuhkan karena
-    'permintaan tinggi'. Format month: 'YYYY-MM' atau 'YYYY-MM-DD'.
+    Pertumbuhan pendapatan sebuah bulan dibanding bulan sebelumnya.
+    Digunakan untuk memverifikasi klaim bahwa pengeluaran besar dibutuhkan
+    karena permintaan tinggi. Format month: 'YYYY-MM' atau 'YYYY-MM-DD'.
     """
     db = SessionLocal()
     try:
-        # Terima 'YYYY-MM' maupun 'YYYY-MM-DD'; normalkan ke hari pertama bulan.
         month_key = month.strip()[:7] + "-01"
 
-        sql = text("""
-            SELECT month, revenue,
-                   LAG(revenue) OVER (ORDER BY month) AS prev_revenue
-            FROM monthly_revenue
-            ORDER BY month
-        """)
-        rows = db.execute(sql).fetchall()
+        # Pendapatan dibaca dari transaksi `type='income'` — sumber yang sama
+        # dengan biaya. Sebelumnya angka ini datang dari tabel monthly_revenue
+        # terpisah, sehingga satu pertanyaan bisa dijawab dua angka berbeda.
+        rows = db.execute(text("""
+            SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'Asia/Jakarta'),
+                           'YYYY-MM-DD') AS bulan,
+                   SUM(amount) AS pendapatan,
+                   LAG(SUM(amount)) OVER (ORDER BY date_trunc('month',
+                       created_at AT TIME ZONE 'Asia/Jakarta')) AS sebelumnya
+            FROM transactions
+            WHERE type = 'income'
+            GROUP BY date_trunc('month', created_at AT TIME ZONE 'Asia/Jakarta')
+            ORDER BY 1
+        """)).fetchall()
+
         if not rows:
             return {
-                "month": month_key,
-                "status": "no_revenue_data",
-                "message": "Tabel monthly_revenue kosong; tren revenue tidak dapat diverifikasi."
+                "month": month_key, "status": "no_revenue_data",
+                "message": "Belum ada transaksi pendapatan; tren tidak dapat diverifikasi."
             }
 
-        target = next((r for r in rows if str(r[0]) == month_key), None)
+        target = next((r for r in rows if r[0] == month_key), None)
         if target is None:
             return {
-                "month": month_key,
-                "status": "month_not_found",
-                "available_months": [str(r[0]) for r in rows],
-                "message": f"Tidak ada data revenue untuk {month_key}."
+                "month": month_key, "status": "month_not_found",
+                "available_months": [r[0] for r in rows],
+                "message": f"Tidak ada pendapatan tercatat untuk {month_key}."
             }
 
         revenue = float(target[1])
         prev = float(target[2]) if target[2] is not None else None
-
         if prev is None or prev == 0:
-            return {
-                "month": month_key,
-                "revenue": revenue,
-                "status": "insufficient_history",
-                "message": "Tidak ada bulan pembanding sebelumnya."
-            }
+            return {"month": month_key, "revenue": revenue,
+                    "status": "insufficient_history",
+                    "message": "Tidak ada bulan pembanding sebelumnya."}
 
         growth = ((revenue - prev) / prev) * 100
-
-        # Ambang 25% dipakai konsisten dengan get_monthly_expense_trend supaya
-        # pertumbuhan revenue dan pertumbuhan biaya dapat dibandingkan setara.
-        if growth > 25:
-            status = "growing"
-        elif growth < -25:
-            status = "declining"
-        else:
-            status = "stagnant"
+        status = "growing" if growth > 25 else "declining" if growth < -25 else "stagnant"
 
         return {
             "month": month_key,
@@ -114,10 +107,13 @@ def get_sales_trend(month: str) -> Dict[str, Any]:
             "previous_month_revenue": prev,
             "trend_percentage": round(growth, 2),
             "status": status,
-            "description": f"Revenue {month_key}: {revenue:,.0f} vs bulan sebelumnya {prev:,.0f} ({growth:+.1f}%)."
+            "source": "transactions.type=income",
+            "description": (f"Pendapatan {month_key}: {revenue:,.0f} vs bulan "
+                            f"sebelumnya {prev:,.0f} ({growth:+.1f}%)."),
         }
     finally:
         db.close()
+
 
 def compare_category_baseline(transaction_id: int) -> Dict[str, Any]:
     """
