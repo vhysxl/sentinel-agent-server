@@ -67,6 +67,13 @@ SHARED_TABLE_DDL = [
     # Pembeda duplicate payment (faktur sama dibayar dua kali) dari split payment
     # (faktur berbeda, dipecah agar lolos ambang persetujuan).
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS invoice_no VARCHAR(50)",
+    # Kapan baris ini DICATAT ke sistem. Ditulis server, bukan dikirim form.
+    #
+    # Inilah yang dinilai aturan jam kerja. `transaction_date` diketik pengguna,
+    # sehingga siapa pun yang sengaja curang tinggal mengetik jam 10:00 untuk
+    # transaksi yang sebenarnya ia input pukul 02:00. `created_at` tidak bisa
+    # disentuh dari form, jadi aturan jam menjadi tahan manipulasi.
+    "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
     # `type` bebas teks membuat WHERE type='expense' diam-diam membuang baris
     # yang tertulis 'Expense' — baris terbuang tidak pernah dianalisis.
     """
@@ -127,6 +134,7 @@ def run_migrations():
         """))}
         print(f"  transactions.invoice_no       {cols.get('invoice_no', 'TIDAK ADA')}")
         print(f"  transactions.transaction_date {cols.get('transaction_date')}")
+        print(f"  transactions.created_at       {cols.get('created_at', 'TIDAK ADA')}")
 
         checks = [r[0] for r in conn.execute(text("""
             SELECT conname FROM pg_constraint

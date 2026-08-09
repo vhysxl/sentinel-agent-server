@@ -80,17 +80,30 @@ def get_or_create_vendor(db, name: str, status: str) -> int:
 
 
 def insert_tx(db, *, date, amount, ttype, category, description,
-              vendor_id, user_id, invoice_no=None) -> int:
+              vendor_id, user_id, invoice_no=None, recorded_at=None) -> int:
+    """
+    `recorded_at` mengisi kolom created_at.
+
+    Di produksi kolom itu diisi server lewat DEFAULT now() dan tidak pernah
+    dikirim dari form. Di seed ia HARUS ditulis eksplisit: kalau dibiarkan
+    default, seluruh 68 baris akan bernilai "saat skrip dijalankan", sehingga
+    aturan jam kerja menilai hal yang sama untuk semua baris dan tidak menguji
+    apa pun.
+
+    Bila tidak diberikan, disamakan dengan waktu transaksi — memodelkan tim yang
+    mencatat saat itu juga.
+    """
     return db.execute(
         text("""
             INSERT INTO transactions
-                (transaction_date, amount, type, category, description,
-                 invoice_no, vendor_id, input_by_user_id)
-            VALUES (:d, :a, :t, :c, :desc, :inv, :v, :u)
+                (transaction_date, created_at, amount, type, category,
+                 description, invoice_no, vendor_id, input_by_user_id)
+            VALUES (:d, :rec, :a, :t, :c, :desc, :inv, :v, :u)
             RETURNING id
         """),
-        {"d": date, "a": amount, "t": ttype, "c": category, "desc": description,
-         "inv": invoice_no, "v": vendor_id, "u": user_id},
+        {"d": date, "rec": recorded_at or date, "a": amount, "t": ttype,
+         "c": category, "desc": description, "inv": invoice_no,
+         "v": vendor_id, "u": user_id},
     ).scalar()
 
 

@@ -117,25 +117,36 @@ def detect_amount_anomaly(db, txn) -> Optional[Trigger]:
 
 def detect_timing(db, txn) -> Optional[Trigger]:
     """
-    Transaksi dicatat di luar jam kerja (Senin-Jumat 08:00-17:59 WIB).
+    Baris dicatat ke sistem di luar jam kerja (Senin-Jumat 08:00-17:59 WIB).
+
+    Membaca `created_at`, BUKAN `transaction_date`. Bedanya menentukan:
+    `transaction_date` diketik dari form, sehingga pelaku tinggal mengetik jam
+    10:00 untuk sesuatu yang ia input pukul 02:00 dan aturan ini jadi tidak
+    berguna. `created_at` ditulis server dan tidak bisa disentuh dari form.
+
+    Pertanyaan yang dijawab: "kapan orang ini membuka aplikasi dan mengetik?"
 
     AMPLIFIER SAJA. Transaksi tidak pernah menjadi temuan hanya karena jamnya.
     Setiap tim keuangan punya orang yang lembur menjelang tutup buku; kalau jam
     saja bisa menciptakan temuan, daftar temuan akan didominasi entri yang
     semuanya sah dan orang berhenti membacanya.
     """
-    local = txn.transaction_date.astimezone(WIB)
+    recorded = txn.created_at or txn.transaction_date
+    local = recorded.astimezone(WIB)
     if local.weekday() < 5 and WORK_START_HOUR <= local.hour < WORK_END_HOUR:
         return None
 
     return Trigger(
         code="timing_outside_hours", points=20, owner=AGENT_1, amplifier_only=True,
         narrative=(
-            f"Transaksi tercatat {local.strftime('%A %d-%m-%Y %H:%M')} WIB, "
-            f"di luar jam kerja (Senin-Jumat "
+            f"Transaksi dicatat ke sistem pada {local.strftime('%A %d-%m-%Y %H:%M')} "
+            f"WIB, di luar jam kerja (Senin-Jumat "
             f"{WORK_START_HOUR:02d}:00-{WORK_END_HOUR - 1:02d}:59)."
         ),
         detail={
+            "evaluated_field": "created_at",
+            "reason": "waktu pencatatan ditulis server, tidak dapat diubah dari form",
+            "recorded_at_wib": local.strftime("%Y-%m-%d %H:%M:%S"),
             "time_wib": local.strftime("%H:%M:%S"),
             "weekday": local.strftime("%A"),
             "timezone": "Asia/Jakarta",

@@ -9,13 +9,21 @@ Jalankan:  python -m pytest tests/ -v
 """
 import os
 import sys
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
+from app.core.config import WIB
 from app.engine import statistics as st
-from app.engine.detectors import AGENT_1, AGENT_2, Trigger, is_candidate
+from app.engine.detectors import (
+    AGENT_1,
+    AGENT_2,
+    Trigger,
+    detect_timing,
+    is_candidate,
+)
 from app.engine.scoring import (
     MAX_BASE_SCORE,
     calculate_base_score,
@@ -186,6 +194,49 @@ class TestRiskBands:
     ])
     def test_boundaries(self, score, band):
         assert risk_decision(score)[0] == band
+
+
+class TestTimingReadsRecordedTime:
+    """
+    Aturan jam WAJIB membaca `created_at` (ditulis server), bukan
+    `transaction_date` (diketik pengguna). Kalau tidak, siapa pun bisa
+    menghindarinya cukup dengan mengetik jam yang wajar.
+    """
+
+    class FakeTxn:
+        def __init__(self, transaction_date, created_at):
+            self.transaction_date = transaction_date
+            self.created_at = created_at
+
+    def _txn(self, business_hhmm, recorded_hhmm, day=13):
+        # 13 Juli 2026 = Senin.
+        return self.FakeTxn(
+            datetime(2026, 7, day, *business_hhmm, tzinfo=WIB),
+            datetime(2026, 7, day, *recorded_hhmm, tzinfo=WIB),
+        )
+
+    def test_flags_when_recorded_late_even_if_business_date_looks_normal(self):
+        """Skenario penghindaran: ketik jam 10:00, padahal input pukul 02:00."""
+        txn = self._txn(business_hhmm=(10, 0), recorded_hhmm=(2, 0))
+        found = detect_timing(None, txn)
+        assert found is not None
+        assert found.code == "timing_outside_hours"
+        assert found.detail["evaluated_field"] == "created_at"
+        assert found.detail["time_wib"] == "02:00:00"
+
+    def test_clean_when_recorded_during_work_hours(self):
+        """Tanggal bisnis larut malam tapi dicatat jam kerja: bukan pelanggaran jam."""
+        txn = self._txn(business_hhmm=(23, 30), recorded_hhmm=(9, 30))
+        assert detect_timing(None, txn) is None
+
+    def test_weekend_recording_is_flagged(self):
+        # 18 Juli 2026 = Sabtu.
+        txn = self._txn(business_hhmm=(10, 0), recorded_hhmm=(10, 0), day=18)
+        assert detect_timing(None, txn).code == "timing_outside_hours"
+
+    def test_timing_is_always_amplifier_only(self):
+        txn = self._txn(business_hhmm=(10, 0), recorded_hhmm=(23, 0))
+        assert detect_timing(None, txn).amplifier_only is True
 
 
 class TestCandidateRule:

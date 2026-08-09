@@ -41,9 +41,18 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, index=True)
+    # Kapan transaksi TERJADI menurut pengguna. Dipakai untuk baseline statistik,
+    # jendela duplikat 24 jam, jendela split payment 7 hari, dan pengelompokan
+    # bulan. Diketik dari form, jadi TIDAK dipakai untuk menilai jam kerja.
+    #
     # timestamptz. Konvensi baca: SELALU konversi ke WIB sebelum menilai jam,
     # karena server database ber-timezone GMT. Lihat app.core.config.WIB.
     transaction_date = Column(DateTime(timezone=True), nullable=False)
+    # Kapan baris ini DICATAT. Ditulis server (DEFAULT now()), tidak pernah
+    # dikirim form. Inilah satu-satunya sumber untuk aturan jam kerja: ia
+    # menjawab "kapan orang ini mengetik", yang tidak bisa dipalsukan.
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        server_default=func.now())
     amount = Column(Numeric(15, 2), nullable=False)
     type = Column(String(10), nullable=False)
     category = Column(String(50), nullable=False)

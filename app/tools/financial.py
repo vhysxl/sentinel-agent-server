@@ -250,8 +250,11 @@ def get_vendor_transaction_history(vendor_id: int) -> Dict[str, Any]:
 
 def check_transaction_timing(transaction_id: int) -> Dict[str, Any]:
     """
-    Mengecek apakah transaksi dicatat di dalam atau di luar jam kerja (WIB).
-    Jam kerja = Senin-Jumat, 08:00-17:59. Selain itu dianggap di luar jam kerja.
+    Mengecek apakah transaksi DICATAT ke sistem di dalam atau di luar jam kerja
+    (WIB). Jam kerja = Senin-Jumat 08:00-17:59.
+
+    Yang dinilai adalah `created_at` (waktu pencatatan, ditulis server), bukan
+    `transaction_date` (tanggal yang diketik pengguna).
     """
     db = SessionLocal()
     try:
@@ -259,10 +262,11 @@ def check_transaction_timing(transaction_id: int) -> Dict[str, Any]:
         if not txn:
             return {"error": f"Transaction {transaction_id} not found."}
 
-        # WAJIB dikonversi ke WIB dulu. transaction_date bertipe timestamptz dan
-        # server database ber-timezone GMT, jadi membaca .time() langsung akan
-        # menghasilkan jam UTC — 09:00 WIB akan terbaca 02:00 dan salah ditandai.
-        local = txn.transaction_date.astimezone(WIB)
+        # WAJIB dikonversi ke WIB dulu. Kolomnya timestamptz dan server database
+        # ber-timezone GMT, jadi membaca jam langsung menghasilkan jam UTC —
+        # 09:00 WIB akan terbaca 02:00 dan salah ditandai sebagai tengah malam.
+        recorded = txn.created_at or txn.transaction_date
+        local = recorded.astimezone(WIB)
 
         is_workday = local.weekday() < 5
         is_workhour = WORK_START_HOUR <= local.hour < WORK_END_HOUR
@@ -270,7 +274,9 @@ def check_transaction_timing(transaction_id: int) -> Dict[str, Any]:
 
         return {
             "transaction_id": transaction_id,
-            "transaction_date_wib": local.strftime("%Y-%m-%d %H:%M:%S"),
+            "evaluated_field": "created_at",
+            "recorded_at_wib": local.strftime("%Y-%m-%d %H:%M:%S"),
+            "business_date_wib": txn.transaction_date.astimezone(WIB).strftime("%Y-%m-%d %H:%M:%S"),
             "weekday": local.strftime("%A"),
             "time_wib": local.strftime("%H:%M:%S"),
             "timezone": "Asia/Jakarta",
@@ -421,7 +427,8 @@ def get_transaction_details(transaction_id: int) -> dict:
                    t.transaction_date AT TIME ZONE 'Asia/Jakarta' AS date_wib,
                    t.amount, t.type, t.category, t.description, t.invoice_no,
                    t.vendor_id, v.vendor_name, v.status AS vendor_status,
-                   t.input_by_user_id, u.fullname, u.is_admin
+                   t.input_by_user_id, u.fullname, u.is_admin,
+                   t.created_at AT TIME ZONE 'Asia/Jakarta' AS recorded_wib
             FROM transactions t
             LEFT JOIN vendors v ON t.vendor_id = v.id
             LEFT JOIN users u ON t.input_by_user_id = u.id
@@ -433,8 +440,10 @@ def get_transaction_details(transaction_id: int) -> dict:
 
         return {
             "transaction_id": result[0],
-            # Sudah dalam WIB. Semua penilaian jam memakai nilai ini.
+            # Kapan transaksi terjadi menurut pengguna (untuk baseline & jendela).
             "transaction_date": str(result[1]),
+            # Kapan dicatat ke sistem, ditulis server. Ini yang dinilai aturan jam.
+            "recorded_at": str(result[13]),
             "timezone": "Asia/Jakarta",
             "amount": float(result[2]),
             "type": result[3],
