@@ -73,34 +73,71 @@ class Transaction(Base):
     user = relationship("User")
 
 
-class AnalysisRun(Base):
-    """Satu kali eksekusi POST /api/analyze atas sebuah rentang tanggal."""
-    __tablename__ = "analysis_runs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    start_date = Column(Date, nullable=False)
-    end_date = Column(Date, nullable=False)
-    started_at = Column(DateTime(timezone=True), server_default=func.now())
-    finished_at = Column(DateTime(timezone=True), nullable=True)
-    status = Column(String(20), nullable=False)  # running | complete | error
-
-
 class Finding(Base):
     """
-    Satu temuan yang diterbitkan sebuah run.
+    Satu temuan. SATU per transaksi, selamanya.
 
-    `payload` menyimpan provenance, evidence, skor per-trigger, dan baseline yang
-    dipakai menilainya — inilah alasan proyek ini memilih PostgreSQL/JSONB.
+    `transaction_id` unik: transaksi yang sudah punya temuan tidak akan pernah
+    jadi kandidat lagi. Itu yang menghentikan penumpukan — sebelumnya tiap kali
+    /analyze dijalankan seluruh temuan dibuat ulang, sehingga satu transaksi
+    tersimpan lima kali dengan tiga skor berbeda.
+
+    Isinya dipecah tiga karena punya pembaca dan umur yang berbeda:
+
+        description  LLM     kalimat pertama yang dibaca orang keuangan
+        evidence     PYTHON  trigger + median/MAD/ambang/n_baseline + skor
+        analysis     LLM     narasi 3 agen, verdict, penyesuaian semantik
+
+    `analysis` nullable dengan sengaja: saat LLM gagal (mis. kuota habis),
+    `evidence` dan `risk_score` tetap terbit dan temuannya tetap sah.
     """
     __tablename__ = "findings"
 
     id = Column(Integer, primary_key=True, index=True)
-    run_id = Column(Integer, ForeignKey("analysis_runs.id"))
-    transaction_id = Column(Integer, ForeignKey("transactions.id"))
-    related_transaction_ids = Column(ARRAY(Integer))
-    final_risk_score = Column(Integer, nullable=False)
-    risk_level = Column(String(20), nullable=False)
-    payload = Column(JSONB, nullable=False)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"),
+                            unique=True, nullable=False)
+    # Seluruh transaksi yang tercakup temuan ini, termasuk jangkarnya.
+    # Dipakai untuk memeriksa apakah sebuah pelanggaran sudah pernah dilaporkan.
+    related_transaction_ids = Column(ARRAY(Integer), nullable=False)
+
+    risk_score = Column(Integer, nullable=False)
+    risk_level = Column(String(10), nullable=False)   # kode, lihat core.constants
+
+    description = Column(Text, nullable=False)
+    evidence = Column(JSONB, nullable=False)
+    analysis = Column(JSONB, nullable=True)
+
+    resolution = Column(String(20), nullable=True)     # NULL = belum ditangani
+    resolution_note = Column(Text, nullable=True)
+    resolved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        server_default=func.now())
+    # Terisi saat grup bertambah anggota dan skornya dihitung ulang tanpa LLM.
+    # UI memakainya untuk menandai narasi mungkin tertinggal dari angka.
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class TransactionAnalysis(Base):
+    """
+    Penanda transaksi mana yang sudah diperiksa, dan hasilnya apa.
+
+    Tanpa tabel ini, "tidak ada di findings" berarti dua hal sekaligus: sudah
+    diperiksa dan bersih, atau pemeriksaannya gagal. Untuk alat audit keduanya
+    tidak boleh terlihat sama — kesalahan yang sama sudah kita hindari pada
+    `insufficient_baseline`.
+
+    Ini juga yang membuat angka "64 aman" di halaman punya arti.
+    """
+    __tablename__ = "transaction_analysis"
+
+    transaction_id = Column(Integer, ForeignKey("transactions.id"),
+                            primary_key=True)
+    analyzed_at = Column(DateTime(timezone=True), nullable=False,
+                         server_default=func.now())
+    status = Column(String(12), nullable=False)   # clean | flagged | failed
+    error = Column(Text, nullable=True)
 
 
 class MonthlyRevenue(Base):

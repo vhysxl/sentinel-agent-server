@@ -122,8 +122,10 @@ def seed():
             )
 
         print("Mengosongkan transactions & monthly_revenue (users/vendors TIDAK disentuh)...")
+        # Urutannya mengikuti foreign key: yang menunjuk transactions dihapus
+        # lebih dulu, baru transactions itu sendiri.
         db.execute(text("DELETE FROM findings"))
-        db.execute(text("DELETE FROM analysis_runs"))
+        db.execute(text("DELETE FROM transaction_analysis"))
         db.execute(text("DELETE FROM transactions"))
         db.execute(text("DELETE FROM monthly_revenue"))
         db.commit()

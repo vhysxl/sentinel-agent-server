@@ -34,24 +34,36 @@ from app.db.session import engine
 # Tabel milik agent server sepenuhnya. Boleh dibuat dan diubah dari sini.
 OWNED_TABLES_DDL = [
     """
-    CREATE TABLE IF NOT EXISTS analysis_runs (
-        id           SERIAL PRIMARY KEY,
-        start_date   DATE NOT NULL,
-        end_date     DATE NOT NULL,
-        started_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-        finished_at  TIMESTAMPTZ,
-        status       VARCHAR(20) NOT NULL
-    )
-    """,
-    """
     CREATE TABLE IF NOT EXISTS findings (
         id                      SERIAL PRIMARY KEY,
-        run_id                  INT REFERENCES analysis_runs(id),
-        transaction_id          INT REFERENCES transactions(id),
-        related_transaction_ids INT[],
-        final_risk_score        INT NOT NULL,
-        risk_level              VARCHAR(20) NOT NULL,
-        payload                 JSONB NOT NULL
+        transaction_id          INT UNIQUE NOT NULL REFERENCES transactions(id),
+        related_transaction_ids INT[] NOT NULL,
+        risk_score              INT NOT NULL,
+        risk_level              VARCHAR(10) NOT NULL,
+        description             TEXT NOT NULL,
+        evidence                JSONB NOT NULL,
+        analysis                JSONB,
+        resolution              VARCHAR(20),
+        resolution_note         TEXT,
+        resolved_by             INT REFERENCES users(id),
+        resolved_at             TIMESTAMPTZ,
+        created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at              TIMESTAMPTZ,
+        CONSTRAINT findings_risk_level_chk
+            CHECK (risk_level IN ('low','medium','high','critical')),
+        CONSTRAINT findings_resolution_chk
+            CHECK (resolution IS NULL OR resolution IN
+                   ('justified','false_positive','confirmed_fraud','escalated'))
+    )
+    """,
+    # Membedakan "sudah diperiksa dan bersih" dari "belum pernah diperiksa".
+    """
+    CREATE TABLE IF NOT EXISTS transaction_analysis (
+        transaction_id INT PRIMARY KEY REFERENCES transactions(id),
+        analyzed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+        status         VARCHAR(12) NOT NULL,
+        error          TEXT,
+        CONSTRAINT ta_status_chk CHECK (status IN ('clean','flagged','failed'))
     )
     """,
     """
@@ -97,6 +109,10 @@ INDEX_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_tx_vendor_type ON transactions (vendor_id, type)",
     "CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions (transaction_date)",
     "CREATE INDEX IF NOT EXISTS idx_tx_invoice ON transactions (vendor_id, invoice_no)",
+    # Dipakai tiap kali sebuah kandidat memeriksa "pelanggaran ini sudah pernah
+    # dilaporkan belum?" lewat operator overlap array (&&).
+    "CREATE INDEX IF NOT EXISTS idx_findings_covered ON findings USING GIN (related_transaction_ids)",
+    "CREATE INDEX IF NOT EXISTS idx_findings_open ON findings (risk_score DESC) WHERE resolution IS NULL",
 ]
 
 
@@ -122,11 +138,14 @@ def run_migrations():
     # Laporan akhir supaya hasilnya bisa dilihat, bukan diasumsikan.
     with engine.connect() as conn:
         print("\nHasil:")
-        for table in ("analysis_runs", "findings", "monthly_revenue"):
+        for table in ("findings", "transaction_analysis", "monthly_revenue"):
             exists = conn.execute(text(
                 "SELECT to_regclass(:t) IS NOT NULL"
             ), {"t": f"public.{table}"}).scalar()
-            print(f"  {table:18} {'ada' if exists else 'TIDAK ADA'}")
+            print(f"  {table:20} {'ada' if exists else 'TIDAK ADA'}")
+        gone = conn.execute(text(
+            "SELECT to_regclass('public.analysis_runs') IS NULL")).scalar()
+        print(f"  {'analysis_runs':20} {'dihapus' if gone else 'MASIH ADA'}")
 
         cols = {r[0]: r[1] for r in conn.execute(text("""
             SELECT column_name, data_type FROM information_schema.columns

@@ -127,7 +127,7 @@ def seed(outlier_amount: int, boom: bool = False):
 
         print("Mengosongkan transaksi (users & vendors TIDAK disentuh)...")
         db.execute(text("DELETE FROM findings"))
-        db.execute(text("DELETE FROM analysis_runs"))
+        db.execute(text("DELETE FROM transaction_analysis"))
         db.execute(text("DELETE FROM transactions"))
         db.execute(text("DELETE FROM monthly_revenue"))
         db.commit()

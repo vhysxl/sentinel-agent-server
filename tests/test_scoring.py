@@ -16,6 +16,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 
 from app.core.config import WIB
+from app.core.constants import (
+    RISK_CRITICAL,
+    RISK_HIGH,
+    RISK_LOW,
+    RISK_MEDIUM,
+)
 from app.engine import statistics as st
 from app.engine.detectors import (
     AGENT_1,
@@ -187,13 +193,23 @@ class TestAdjustment:
 
 class TestRiskBands:
     @pytest.mark.parametrize("score,band", [
-        (0, "Low Risk"), (39, "Low Risk"),
-        (40, "Medium Risk"), (59, "Medium Risk"),
-        (60, "High Risk"), (79, "High Risk"),
-        (80, "Critical Risk"), (100, "Critical Risk"),
+        (0, RISK_LOW), (39, RISK_LOW),
+        (40, RISK_MEDIUM), (59, RISK_MEDIUM),
+        (60, RISK_HIGH), (79, RISK_HIGH),
+        (80, RISK_CRITICAL), (100, RISK_CRITICAL),
     ])
     def test_boundaries(self, score, band):
         assert risk_decision(score)[0] == band
+
+    def test_never_returns_display_text(self):
+        """
+        Yang disimpan ke database harus KODE. Teks seperti RISK_CRITICAL adalah
+        copy antarmuka berbahasa Inggris, sementara UI berbahasa Indonesia —
+        menyimpannya berarti menjadikan tampilan sebagai data.
+        """
+        for score in (0, 45, 70, 95):
+            level = risk_decision(score)[0]
+            assert level.islower() and " " not in level
 
 
 class TestTimingReadsRecordedTime:
@@ -269,8 +285,8 @@ class TestAcceptanceCases:
         tidak menemukan pembenaran."""
         base = calculate_base_score([trigger("z_score_anomaly", 50, AGENT_1)])
         assert base["base_risk_score"] == 50
-        assert risk_decision(50)[0] == "Medium Risk"
-        assert finalize(base, 15)["risk_level"] == "High Risk"
+        assert risk_decision(50)[0] == RISK_MEDIUM
+        assert finalize(base, 15)["risk_level"] == RISK_HIGH
 
     def test_case_b_critical_without_any_llm_help(self):
         """Fakta pasti harus cukup sendirian. adjustment = 0."""
@@ -280,7 +296,7 @@ class TestAcceptanceCases:
             trigger("timing_outside_hours", 20, AGENT_1, amplifier=True),
         ]), 0)
         assert result["base_risk_score"] == 80
-        assert result["risk_level"] == "Critical Risk"
+        assert result["risk_level"] == RISK_CRITICAL
 
     def test_case_b2_split_payment_high_at_base(self):
         result = finalize(calculate_base_score([
@@ -288,11 +304,63 @@ class TestAcceptanceCases:
             trigger("role_bypass", 10),
         ]), 0)
         assert result["base_risk_score"] == 60
-        assert result["risk_level"] == "High Risk"
+        assert result["risk_level"] == RISK_HIGH
 
     def test_case_c_and_e_produce_nothing(self):
         assert is_candidate([]) is False
 
     def test_case_d_review_overturns_to_low(self):
         base = calculate_base_score([trigger("z_score_anomaly", 50, AGENT_1)])
-        assert finalize(base, -20)["risk_level"] == "Low Risk"
+        assert finalize(base, -20)["risk_level"] == RISK_LOW
+
+
+# ---------------------------------------------------------------------------
+# Pengelompokan: satu pelanggaran = satu temuan
+# ---------------------------------------------------------------------------
+
+class TestGroupIdentification:
+    """
+    `group_ids_of` menentukan transaksi mana saja yang tercakup satu temuan.
+
+    Ini yang mencegah split payment tiga pembayaran menghasilkan tiga kartu di
+    layar. Keterkaitannya dibaca dari `detail.transaction_ids` milik trigger —
+    bukan ditebak dari kesamaan vendor/nominal/tanggal, karena cara lama
+    bergantung pada tanggal kalender dan tanggal kalender bergantung zona waktu.
+    """
+
+    def test_split_payment_covers_every_member(self):
+        from app.main import group_ids_of
+        split = trigger("split_payment", 50,
+                        detail={"transaction_ids": [708, 709, 710]})
+        assert group_ids_of(709, [split]) == [708, 709, 710]
+
+    def test_third_payment_yields_the_same_group(self):
+        """
+        Pembayaran ke-3 datang belakangan dan menghasilkan grup yang sama, jadi
+        pemeriksaan tumpang-tindih menemukan temuan lama dan memperbaruinya —
+        bukan membuat temuan kedua.
+        """
+        from app.main import group_ids_of
+        split = trigger("split_payment", 50,
+                        detail={"transaction_ids": [708, 709, 710]})
+        assert group_ids_of(710, [split]) == group_ids_of(709, [split])
+
+    def test_lone_transaction_covers_only_itself(self):
+        from app.main import group_ids_of
+        z = trigger("z_score_anomaly", 50, AGENT_1, detail={"method": "vendor_mad"})
+        assert group_ids_of(673, [z]) == [673]
+
+    def test_anchor_always_included(self):
+        """Jangkar wajib ikut, meski trigger tidak menyebutkannya."""
+        from app.main import group_ids_of
+        dup = trigger("duplicate_confirmed", 50,
+                      detail={"transaction_ids": [706]})
+        assert group_ids_of(707, [dup]) == [706, 707]
+
+    def test_amplifier_without_ids_does_not_widen_group(self):
+        from app.main import group_ids_of
+        timing = trigger("timing_outside_hours", 20, AGENT_1, amplifier=True,
+                         detail={"time_wib": "23:15:00"})
+        dup = trigger("duplicate_confirmed", 50,
+                      detail={"transaction_ids": [706, 707]})
+        assert group_ids_of(706, [timing, dup]) == [706, 707]

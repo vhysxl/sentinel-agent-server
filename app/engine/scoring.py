@@ -12,6 +12,13 @@ diam menjadi 0 tanpa ada yang tahu.
 
 LLM hanya boleh mempengaruhi dua hal: narasi, dan llm_semantic_adjustment (+/-20).
 """
+from app.core.constants import (
+    RISK_ACTION,
+    RISK_CRITICAL,
+    RISK_HIGH,
+    RISK_LOW,
+    RISK_MEDIUM,
+)
 from app.engine.detectors import Trigger
 
 MAX_BASE_SCORE = 80
@@ -30,11 +37,17 @@ EXCLUSIVE_GROUPS = [
     {"insufficient_baseline"},
 ]
 
+# Ambang atas (eksklusif) -> kode tingkat risiko.
+#
+# Yang dikembalikan KODE, bukan "Critical Risk". Teks itu adalah tampilan:
+# ia berbahasa Inggris sementara UI berbahasa Indonesia, dan menyimpannya di
+# database berarti menyimpan copy antarmuka sebagai data. Labelnya ada di
+# app/core/constants.py.
 RISK_BANDS = [
-    (40, "Low Risk", "Transaksi wajar. Otomatis disetujui (No Action)."),
-    (60, "Medium Risk", "Anomali ringan. Dicatat ke dalam audit report bulanan."),
-    (80, "High Risk", "Indikasi kecurangan. Butuh verifikasi manual (Manual Review)."),
-    (101, "Critical Risk", "Indikasi fraud fatal. Eskalasi darurat ke Manajer/CFO."),
+    (40, RISK_LOW),
+    (60, RISK_MEDIUM),
+    (80, RISK_HIGH),
+    (101, RISK_CRITICAL),
 ]
 
 
@@ -113,10 +126,11 @@ def clamp_adjustment(value) -> int:
 
 
 def risk_decision(final_score: int) -> tuple[str, str]:
-    for ceiling, level, recommendation in RISK_BANDS:
+    """Mengembalikan (kode_tingkat, tindakan_yang_disarankan)."""
+    for ceiling, level in RISK_BANDS:
         if final_score < ceiling:
-            return level, recommendation
-    return RISK_BANDS[-1][1], RISK_BANDS[-1][2]
+            return level, RISK_ACTION[level]
+    return RISK_CRITICAL, RISK_ACTION[RISK_CRITICAL]
 
 
 def finalize(base_scoring: dict, semantic_adjustment, adjustment_reason: str = "") -> dict:

@@ -116,7 +116,7 @@ def seed(mode: str):
             raise SystemExit(f"User id {missing} tidak ada. Tersedia: {users}")
 
         print("Mengosongkan transaksi (users & vendors TIDAK disentuh)...")
-        for table in ("findings", "analysis_runs", "transactions", "monthly_revenue"):
+        for table in ("findings", "transaction_analysis", "transactions", "monthly_revenue"):
             db.execute(text(f"DELETE FROM {table}"))
         db.commit()
 
