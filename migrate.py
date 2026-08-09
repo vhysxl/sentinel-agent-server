@@ -17,10 +17,10 @@ ATURAN KERAS
 
 PERINGATAN untuk tabel `transactions`
 -------------------------------------
-`transactions` juga dimiliki aplikasi Next.js (Drizzle). Dua perubahan di bawah
-harus DISALIN ke berkas skema Drizzle, kalau tidak `drizzle-kit push` berikutnya
+`transactions` juga dimiliki aplikasi Next.js (Drizzle). Perubahan di bawah harus
+sejalan dengan berkas skema Drizzle, kalau tidak migrasi berikutnya dari sana
 akan mengembalikannya tanpa peringatan:
-  - `transaction_date` bertipe timestamptz  (varian withTimezone)
+  - kolom `created_at` (timestamptz, DEFAULT now()) — satu-satunya waktu transaksi
   - kolom `invoice_no`
 """
 import sys
@@ -73,12 +73,12 @@ SHARED_TABLE_DDL = [
     # Pembeda duplicate payment (faktur sama dibayar dua kali) dari split payment
     # (faktur berbeda, dipecah agar lolos ambang persetujuan).
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS invoice_no VARCHAR(50)",
-    # Kapan baris ini DICATAT ke sistem. Ditulis server, bukan dikirim form.
+    # SATU-SATUNYA waktu sebuah transaksi: kapan mutasi tercatat.
     #
-    # Inilah yang dinilai aturan jam kerja. `transaction_date` diketik pengguna,
-    # sehingga siapa pun yang sengaja curang tinggal mengetik jam 10:00 untuk
-    # transaksi yang sebenarnya ia input pukul 02:00. `created_at` tidak bisa
-    # disentuh dari form, jadi aturan jam menjadi tahan manipulasi.
+    # Ditulis database, tidak pernah dikirim form — itulah yang membuat aturan
+    # jam kerja tahan manipulasi. Kolom `transaction_date` yang dulu diketik
+    # pengguna sudah dihapus; dua makna waktu berarti dua jawaban untuk satu
+    # pertanyaan.
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
     # `type` bebas teks membuat WHERE type='expense' diam-diam membuang baris
     # yang tertulis 'Expense' — baris terbuang tidak pernah dianalisis.
@@ -101,9 +101,7 @@ SHARED_TABLE_DDL = [
 # Indeks pendukung deteksi.
 INDEX_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_tx_vendor_type ON transactions (vendor_id, type)",
-    # Indeks lama menempel di transaction_date — kolom warisan yang tidak pernah
-    # di-query lagi sejak seluruh sistem beralih ke created_at. Setiap agregat
-    # periode memfilter created_at, jadi indeksnya harus di sana.
+    # Indeks lama menempel pada kolom yang kini sudah dihapus.
     "DROP INDEX IF EXISTS idx_tx_date",
     "CREATE INDEX IF NOT EXISTS idx_tx_created_at ON transactions (created_at)",
     "CREATE INDEX IF NOT EXISTS idx_tx_created_type ON transactions (created_at, type)",
@@ -189,7 +187,6 @@ def run_migrations():
             WHERE table_name = 'transactions'
         """))}
         print(f"  transactions.invoice_no       {cols.get('invoice_no', 'TIDAK ADA')}")
-        print(f"  transactions.transaction_date {cols.get('transaction_date')}")
         print(f"  transactions.created_at       {cols.get('created_at', 'TIDAK ADA')}")
 
         checks = [r[0] for r in conn.execute(text("""

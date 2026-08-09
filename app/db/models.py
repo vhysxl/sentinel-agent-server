@@ -41,10 +41,6 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, index=True)
-    # WARISAN. Kolom ini dimiliki aplikasi Next.js dan NOT NULL, jadi tidak bisa
-    # dihapus dari sini. Agent server TIDAK PERNAH membacanya. Seed mengisinya
-    # sama dengan created_at semata-mata agar constraint terpenuhi.
-    transaction_date = Column(DateTime(timezone=True), nullable=False)
     # SATU-SATUNYA waktu yang dipakai sistem ini.
     #
     # Transaksi masuk dari API bank: saat bank mencatatnya ITULAH saat transaksi

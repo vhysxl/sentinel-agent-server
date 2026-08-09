@@ -83,9 +83,9 @@ def to_weekday(dt: datetime) -> datetime:
 def insert(db, *, date, amount, description, user_id):
     return db.execute(text("""
         INSERT INTO transactions
-            (transaction_date, created_at, amount, type, category,
+            (created_at, amount, type, category,
              description, vendor_id, input_by_user_id)
-        VALUES (:d, :d, :a, 'expense', :c, :desc, NULL, :u)
+        VALUES (:d, :a, 'expense', :c, :desc, NULL, :u)
         RETURNING id
     """), {"d": date, "a": amount, "c": CATEGORY,
            "desc": description, "u": user_id}).scalar()
@@ -122,9 +122,9 @@ def seed_revenue(db, months: list[datetime], boom_month: str | None):
                 day=min(5 + k * 9, 28), hour=random.randint(9, 16)))
             db.execute(text("""
                 INSERT INTO transactions
-                    (transaction_date, created_at, amount, type, category,
+                    (created_at, amount, type, category,
                      description, vendor_id, input_by_user_id)
-                VALUES (:d, :d, :a, 'income', 'Sales', :desc, NULL, :u)
+                VALUES (:d, :a, 'income', 'Sales', :desc, NULL, :u)
             """), {"d": d, "a": round(share, 2),
                    "desc": f"Penjualan periode {key[:7]} termin {k + 1}",
                    "u": random.choice(PAYROLL_INPUTTERS)})

@@ -94,13 +94,12 @@ def get_or_create_vendor(db, name, status="active"):
 
 def insert(db, *, date, amount, description,
            vendor_id, user_id, invoice_no=None):
-    """`date` ditulis ke created_at (dibaca sistem) sekaligus transaction_date
-    (kolom warisan yang NOT NULL). Keduanya selalu sama."""
+    """`date` mengisi created_at — satu-satunya waktu sebuah transaksi."""
     return db.execute(text("""
         INSERT INTO transactions
-            (transaction_date, created_at, amount, type, category,
+            (created_at, amount, type, category,
              description, invoice_no, vendor_id, input_by_user_id)
-        VALUES (:d, :d, :a, 'expense', :c, :desc, :inv, :v, :u)
+        VALUES (:d, :a, 'expense', :c, :desc, :inv, :v, :u)
         RETURNING id
     """), {"d": date, "a": amount, "c": CATEGORY,
            "desc": description, "inv": invoice_no,

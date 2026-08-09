@@ -13,8 +13,7 @@ ATURAN KERAS
    sehingga skrip ini dapat dijalankan berulang dengan hasil identik.
 4. Semua waktu SADAR-ZONA WIB. created_at bertipe timestamptz dan server
    database ber-timezone GMT; menulis waktu naif akan bergeser 7 jam.
-5. Hanya ada SATU waktu per transaksi: created_at, yaitu saat tercatat dari API
-   bank. transaction_date diisi nilai yang sama semata-mata karena NOT NULL.
+5. Hanya ada SATU waktu per transaksi: created_at, yaitu saat mutasi tercatat.
 
 Menanam 6 kasus uji dengan jawaban yang sudah diketahui. Lihat PLAN.md §10.
 """
@@ -84,11 +83,7 @@ def get_or_create_vendor(db, name: str, status: str) -> int:
 def insert_tx(db, *, date, amount, ttype, category, description,
               vendor_id, user_id, invoice_no=None) -> int:
     """
-    `date` adalah SATU-SATUNYA waktu: kapan transaksi tercatat dari API bank.
-
-    Ditulis ke created_at (yang dibaca seluruh sistem) sekaligus ke
-    transaction_date (kolom warisan milik aplikasi Next.js yang NOT NULL).
-    Keduanya selalu sama.
+    `date` adalah SATU-SATUNYA waktu: kapan mutasi tercatat.
 
     Di seed nilainya HARUS eksplisit. Kalau dibiarkan DEFAULT now(), seluruh
     baris bernilai "saat skrip dijalankan", sehingga aturan jam kerja menilai
@@ -97,12 +92,12 @@ def insert_tx(db, *, date, amount, ttype, category, description,
     return db.execute(
         text("""
             INSERT INTO transactions
-                (transaction_date, created_at, amount, type, category,
+                (created_at, amount, type, category,
                  description, invoice_no, vendor_id, input_by_user_id)
-            VALUES (:d, :rec, :a, :t, :c, :desc, :inv, :v, :u)
+            VALUES (:d, :a, :t, :c, :desc, :inv, :v, :u)
             RETURNING id
         """),
-        {"d": date, "rec": date, "a": amount, "t": ttype,
+        {"d": date, "a": amount, "t": ttype,
          "c": category, "desc": description, "inv": invoice_no,
          "v": vendor_id, "u": user_id},
     ).scalar()

@@ -7,7 +7,7 @@
       "id": "A",
       "name": "Lonjakan pengeluaran",
       "transaction_ids": [
-        1326
+        1510
       ],
       "expected_triggers": [
         "z_score_anomaly"
@@ -21,8 +21,8 @@
       "id": "B",
       "name": "Duplicate payment",
       "transaction_ids": [
-        1359,
-        1360
+        1543,
+        1544
       ],
       "invoice_no": "INV-2026-0731",
       "expected_triggers": [
@@ -39,9 +39,9 @@
       "id": "B2",
       "name": "Split payment",
       "transaction_ids": [
-        1361,
-        1362,
-        1363
+        1545,
+        1546,
+        1547
       ],
       "expected_triggers": [
         "split_payment",
@@ -56,36 +56,36 @@
       "id": "C",
       "name": "Transaksi normal",
       "transaction_ids": [
-        1296,
-        1297,
-        1298,
-        1299,
-        1300,
-        1301,
-        1302,
-        1303,
-        1304,
-        1305,
-        1306,
-        1307,
-        1308,
-        1309,
-        1310,
-        1311,
-        1312,
-        1313,
-        1314,
-        1315,
-        1316,
-        1317,
-        1318,
-        1319,
-        1320,
-        1321,
-        1322,
-        1323,
-        1324,
-        1325
+        1480,
+        1481,
+        1482,
+        1483,
+        1484,
+        1485,
+        1486,
+        1487,
+        1488,
+        1489,
+        1490,
+        1491,
+        1492,
+        1493,
+        1494,
+        1495,
+        1496,
+        1497,
+        1498,
+        1499,
+        1500,
+        1501,
+        1502,
+        1503,
+        1504,
+        1505,
+        1506,
+        1507,
+        1508,
+        1509
       ],
       "expected_triggers": [],
       "expected_band": null,
@@ -96,7 +96,7 @@
       "id": "D",
       "name": "False positive yang harus dibatalkan",
       "transaction_ids": [
-        1345
+        1529
       ],
       "expected_triggers": [
         "z_score_anomaly"
@@ -110,7 +110,7 @@
       "id": "E",
       "name": "Lembur yang sah",
       "transaction_ids": [
-        1358
+        1542
       ],
       "expected_triggers": [],
       "expected_band": null,
