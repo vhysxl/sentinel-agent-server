@@ -1,32 +1,26 @@
 [
   {
-    "transaction_id": 342,
+    "transaction_id": 570,
     "related_transaction_ids": [
-      342
+      570
     ],
-    "finding": "Transaksi ID 342 sebesar 120.000.000 untuk PT. Solusi Teknologi Makmur teridentifikasi sebagai outlier ekstrem berdasarkan data historis vendor dan kategori IT Services. Meskipun terdapat pertumbuhan revenue perusahaan sebesar 43,4% pada Juni 2026 (1.170.080.000 vs 816.000.000), nominal transaksi ini tetap tidak proporsional dengan pola pengeluaran operasional bulanan. Disarankan untuk melakukan audit dokumen pendukung (invoice/kontrak) guna memastikan keabsahan penambahan kapasitas server tersebut.",
+    "finding": "Nominal 45,000,000 berada pada modified z-score 158.4 terhadap 20 transaksi pembanding (median 20,027,087, MAD 106,312, ambang 3.5). Baseline: category.",
     "investigation": {
-      "agent1_verdict": "risk",
+      "agent1_verdict": "explainable",
       "agent1_confidence": "high",
       "agent2_verdict": "explainable",
       "agent2_confidence": "high",
-      "verdict_review": {
-        "agent1": "agreed",
-        "agent2": "rejected",
-        "reason": "Detektif 1 memberikan analisis yang konsisten dengan data objektif dan statistik outlier. Detektif 2 ditolak karena meskipun menyebut angka revenue yang benar, ia mengabaikan fakta bahwa total pengeluaran perusahaan tidak menunjukkan korelasi yang cukup kuat untuk membenarkan lonjakan transaksi sebesar itu, sehingga kesimpulannya terlalu spekulatif."
-      }
+      "verdict_review": {}
     },
     "provenance": {
       "generated_by": "Agent_3_Final_Review",
       "tools_used": [
-        "compare_category_baseline",
         "get_monthly_expense_trend",
-        "get_user_spending_pattern",
-        "get_vendor_transaction_history"
+        "get_user_spending_pattern"
       ],
       "scored_by": "python_scoring_engine",
       "llm_model": "models/gemini-3.1-flash-lite",
-      "llm_model_verifier": "models/gemini-3.1-flash-lite"
+      "llm_model_verifier": "models/gemini-3.5-flash"
     },
     "evidence": {
       "objective": [
@@ -35,84 +29,61 @@
           "points": 50,
           "owner": "agent_1_financial",
           "amplifier_only": false,
-          "narrative": "Nominal 120,000,000 berada pada modified z-score 36.3 terhadap 18 transaksi pembanding (median 10,407,977, MAD 2,038,758, ambang 3.5). Baseline: vendor.",
+          "narrative": "Nominal 45,000,000 berada pada modified z-score 158.4 terhadap 20 transaksi pembanding (median 20,027,087, MAD 106,312, ambang 3.5). Baseline: category.",
           "detail": {
-            "scope": "vendor",
-            "method": "vendor_mad",
-            "n_baseline": 18,
-            "median": 10407976.54,
-            "mad": 2038757.69,
+            "scope": "category",
+            "method": "category_mad",
+            "n_baseline": 20,
+            "median": 20027086.8,
+            "mad": 106311.82,
             "threshold": 3.5,
-            "computed_value": 36.26,
-            "confidence": "high",
+            "computed_value": 158.44,
+            "confidence": "medium",
             "is_anomaly": true,
-            "message": "Nominal 120,000,000 berada pada modified z-score 36.3 terhadap 18 transaksi pembanding (median 10,407,977, MAD 2,038,758, ambang 3.5). Baseline: vendor."
+            "message": "Nominal 45,000,000 berada pada modified z-score 158.4 terhadap 20 transaksi pembanding (median 20,027,087, MAD 106,312, ambang 3.5). Baseline: category."
           }
         }
       ],
       "context": [
         {
-          "source": "compare_category_baseline",
-          "insight": "Transaksi 120.000.000 adalah outlier kategori IT Services dengan z-score 45,35 (rata-rata kategori 10.165.908)."
-        },
-        {
-          "source": "get_vendor_transaction_history",
-          "insight": "Rata-rata transaksi vendor PT. Solusi Teknologi Makmur adalah 15.946.650, menjadikan transaksi 120.000.000 sangat tidak lazim."
-        },
-        {
           "source": "get_monthly_expense_trend",
-          "insight": "Total pengeluaran Juni 2026 sebesar 256.204.917 tidak mencerminkan lonjakan biaya infrastruktur yang proporsional dengan nominal transaksi tersebut."
+          "insight": "Tren pengeluaran bulanan menunjukkan peningkatan biaya yang konsisten dengan pertumbuhan revenue sebesar 49,48% pada periode Juli 2026."
+        },
+        {
+          "source": "z_score_anomaly",
+          "insight": "Meskipun secara statistik nominal 45.000.000 terdeteksi sebagai anomali (z-score 158,4) dibandingkan median kategori, hal ini dapat dijelaskan oleh lonjakan bonus kinerja yang sebanding dengan pertumbuhan revenue perusahaan."
         },
         {
           "source": "get_user_spending_pattern",
-          "insight": "Rata-rata transaksi user adalah 11.841.950, namun transaksi ini adalah nilai tertinggi yang pernah diinput oleh user tersebut."
-        },
-        {
-          "source": "get_vendor_transaction_history",
-          "insight": "PT. Solusi Teknologi Makmur adalah vendor established dengan 19 transaksi, namun transaksi 120.000.000 ini merupakan lonjakan signifikan dibanding rata-rata transaksi vendor sebesar 15.946.650."
+          "insight": "User Yogi Ferdiansyah (ID 9) memiliki pola input yang konsisten dengan kategori operasional dan payroll, sehingga transaksi ini berada dalam lingkup kewenangannya."
         },
         {
           "source": "get_monthly_expense_trend",
-          "insight": "Total expense bulan Juni 2026 meningkat menjadi 256.204.917, sejalan dengan pertumbuhan revenue 43,4% pada periode yang sama."
+          "insight": "Tren pengeluaran bulanan menunjukkan korelasi positif dengan peningkatan aktivitas operasional perusahaan, mendukung justifikasi pembayaran bonus kinerja."
         }
       ],
-      "semantic": [
-        {
-          "source": "revenue_context",
-          "insight": "Revenue Juni 2026 sebesar 1.170.080.000 dibandingkan bulan sebelumnya 816.000.000 (+43,4%) telah diverifikasi."
-        },
-        {
-          "source": "compare_category_baseline",
-          "insight": "Transaksi 120.000.000 adalah outlier kategori IT Services dengan z-score 45,35."
-        }
-      ]
+      "semantic": []
     },
     "agent_results": {
       "agent1": {
-        "verdict": "risk",
+        "verdict": "explainable",
         "confidence": "high",
-        "finding": "Transaksi sebesar 120.000.000 merupakan outlier ekstrem dengan z-score 45,35 terhadap baseline kategori IT Services (rata-rata 10.165.908). Meskipun revenue perusahaan tumbuh 43,4% pada Juni 2026, total pengeluaran perusahaan pada bulan tersebut (256.204.917) tidak menunjukkan pola peningkatan biaya infrastruktur yang konsisten dengan nominal transaksi ini. Selain itu, riwayat transaksi vendor menunjukkan rata-rata transaksi sebesar 15.946.650, sehingga nominal 120.000.000 sangat tidak lazim dan tidak didukung oleh tren pengeluaran operasional yang wajar.",
+        "finding": "Transaksi sebesar 45.000.000 untuk kategori 'Payroll & Benefits' dapat dijelaskan oleh pertumbuhan bisnis yang signifikan. Data menunjukkan revenue perusahaan meningkat sebesar 49,48% pada bulan Juli 2026 (1,43 miliar dibandingkan 956,9 juta pada bulan sebelumnya). Tren pengeluaran bulanan menunjukkan kenaikan total biaya operasional yang selaras dengan peningkatan aktivitas bisnis, sehingga pembayaran bonus kinerja karyawan atas pencapaian penjualan tersebut merupakan pengeluaran yang wajar dan berkorelasi dengan performa revenue.",
         "provenance": {
           "generated_by": "Agent_1_Financial_Analytics",
           "tools_used": [
-            "get_monthly_expense_trend",
-            "compare_category_baseline",
-            "get_vendor_transaction_history"
+            "get_monthly_expense_trend"
           ]
         },
         "evidence": {
           "context": [
             {
-              "source": "compare_category_baseline",
-              "insight": "Transaksi 120.000.000 adalah outlier kategori IT Services dengan z-score 45,35 (rata-rata kategori 10.165.908)."
-            },
-            {
-              "source": "get_vendor_transaction_history",
-              "insight": "Rata-rata transaksi vendor PT. Solusi Teknologi Makmur adalah 15.946.650, menjadikan transaksi 120.000.000 sangat tidak lazim."
-            },
-            {
               "source": "get_monthly_expense_trend",
-              "insight": "Total pengeluaran Juni 2026 sebesar 256.204.917 tidak mencerminkan lonjakan biaya infrastruktur yang proporsional dengan nominal transaksi tersebut."
+              "insight": "Tren pengeluaran bulanan menunjukkan peningkatan biaya yang konsisten dengan pertumbuhan revenue sebesar 49,48% pada periode Juli 2026."
+            },
+            {
+              "source": "z_score_anomaly",
+              "insight": "Meskipun secara statistik nominal 45.000.000 terdeteksi sebagai anomali (z-score 158,4) dibandingkan median kategori, hal ini dapat dijelaskan oleh lonjakan bonus kinerja yang sebanding dengan pertumbuhan revenue perusahaan."
             }
           ]
         }
@@ -120,12 +91,11 @@
       "agent2": {
         "verdict": "explainable",
         "confidence": "high",
-        "finding": "Transaksi sebesar 120.000.000 untuk PT. Solusi Teknologi Makmur memiliki penjelasan yang sah. Meskipun nominal ini jauh di atas rata-rata transaksi penginput (mean 11.841.950) dan vendor (mean 15.946.650), terdapat korelasi kuat dengan pertumbuhan revenue perusahaan sebesar 43,4% pada bulan Juni 2026 (1.170.080.000 vs 816.000.000). Lonjakan biaya IT ini selaras dengan deskripsi transaksi untuk penambahan kapasitas server guna menopang peningkatan order, yang didukung oleh data tren pengeluaran bulanan yang menunjukkan kenaikan total expense di bulan Juni 2026.",
+        "finding": "Transaksi sebesar Rp45.000.000 untuk kategori 'Payroll & Benefits' memiliki penjelasan yang logis. Berdasarkan data, perusahaan mengalami pertumbuhan revenue yang signifikan sebesar 49,48% pada bulan Juli 2026 (Rp1.430.400.997 dibandingkan Rp956.917.981 pada bulan sebelumnya). Lonjakan biaya ini selaras dengan deskripsi transaksi yang menyebutkan adanya pembayaran bonus kinerja atas pencapaian penjualan periode tersebut.",
         "provenance": {
           "generated_by": "Agent_2_Fraud_Investigator",
           "tools_used": [
             "get_user_spending_pattern",
-            "get_vendor_transaction_history",
             "get_monthly_expense_trend"
           ]
         },
@@ -133,50 +103,18 @@
           "context": [
             {
               "source": "get_user_spending_pattern",
-              "insight": "Rata-rata transaksi user adalah 11.841.950, namun transaksi ini adalah nilai tertinggi yang pernah diinput oleh user tersebut."
-            },
-            {
-              "source": "get_vendor_transaction_history",
-              "insight": "PT. Solusi Teknologi Makmur adalah vendor established dengan 19 transaksi, namun transaksi 120.000.000 ini merupakan lonjakan signifikan dibanding rata-rata transaksi vendor sebesar 15.946.650."
+              "insight": "User Yogi Ferdiansyah (ID 9) memiliki pola input yang konsisten dengan kategori operasional dan payroll, sehingga transaksi ini berada dalam lingkup kewenangannya."
             },
             {
               "source": "get_monthly_expense_trend",
-              "insight": "Total expense bulan Juni 2026 meningkat menjadi 256.204.917, sejalan dengan pertumbuhan revenue 43,4% pada periode yang sama."
+              "insight": "Tren pengeluaran bulanan menunjukkan korelasi positif dengan peningkatan aktivitas operasional perusahaan, mendukung justifikasi pembayaran bonus kinerja."
             }
           ]
         }
       },
       "agent3": {
-        "finding": "Transaksi ID 342 sebesar 120.000.000 untuk PT. Solusi Teknologi Makmur teridentifikasi sebagai outlier ekstrem berdasarkan data historis vendor dan kategori IT Services. Meskipun terdapat pertumbuhan revenue perusahaan sebesar 43,4% pada Juni 2026 (1.170.080.000 vs 816.000.000), nominal transaksi ini tetap tidak proporsional dengan pola pengeluaran operasional bulanan. Disarankan untuk melakukan audit dokumen pendukung (invoice/kontrak) guna memastikan keabsahan penambahan kapasitas server tersebut.",
-        "verdict_review": {
-          "agent1": "agreed",
-          "agent2": "rejected",
-          "reason": "Detektif 1 memberikan analisis yang konsisten dengan data objektif dan statistik outlier. Detektif 2 ditolak karena meskipun menyebut angka revenue yang benar, ia mengabaikan fakta bahwa total pengeluaran perusahaan tidak menunjukkan korelasi yang cukup kuat untuk membenarkan lonjakan transaksi sebesar itu, sehingga kesimpulannya terlalu spekulatif."
-        },
-        "provenance": {
-          "generated_by": "Agent_3_Evidence_Review",
-          "tools_used": [
-            "compare_category_baseline",
-            "get_vendor_transaction_history",
-            "get_monthly_expense_trend"
-          ]
-        },
-        "evidence": {
-          "semantic": [
-            {
-              "source": "revenue_context",
-              "insight": "Revenue Juni 2026 sebesar 1.170.080.000 dibandingkan bulan sebelumnya 816.000.000 (+43,4%) telah diverifikasi."
-            },
-            {
-              "source": "compare_category_baseline",
-              "insight": "Transaksi 120.000.000 adalah outlier kategori IT Services dengan z-score 45,35."
-            }
-          ]
-        },
-        "scoring": {
-          "llm_semantic_adjustment": 10,
-          "adjustment_reason": "Konteks revenue memang tumbuh, namun tidak cukup untuk menjustifikasi lonjakan biaya infrastruktur yang mencapai 45,35 z-score, sehingga risiko fraud tetap tinggi."
-        }
+        "_failed": true,
+        "error": "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.5-flash\\nPlease retry in 39.513150404s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '39s'}]}}"
       }
     },
     "scoring": {
@@ -196,27 +134,28 @@
           "points": 50,
           "owner": "agent_1_financial",
           "amplifier_only": false,
-          "narrative": "Nominal 120,000,000 berada pada modified z-score 36.3 terhadap 18 transaksi pembanding (median 10,407,977, MAD 2,038,758, ambang 3.5). Baseline: vendor.",
+          "narrative": "Nominal 45,000,000 berada pada modified z-score 158.4 terhadap 20 transaksi pembanding (median 20,027,087, MAD 106,312, ambang 3.5). Baseline: category.",
           "detail": {
-            "scope": "vendor",
-            "method": "vendor_mad",
-            "n_baseline": 18,
-            "median": 10407976.54,
-            "mad": 2038757.69,
+            "scope": "category",
+            "method": "category_mad",
+            "n_baseline": 20,
+            "median": 20027086.8,
+            "mad": 106311.82,
             "threshold": 3.5,
-            "computed_value": 36.26,
-            "confidence": "high",
+            "computed_value": 158.44,
+            "confidence": "medium",
             "is_anomaly": true,
-            "message": "Nominal 120,000,000 berada pada modified z-score 36.3 terhadap 18 transaksi pembanding (median 10,407,977, MAD 2,038,758, ambang 3.5). Baseline: vendor."
+            "message": "Nominal 45,000,000 berada pada modified z-score 158.4 terhadap 20 transaksi pembanding (median 20,027,087, MAD 106,312, ambang 3.5). Baseline: category."
           }
         }
       ],
       "suppressed_triggers": [],
-      "llm_semantic_adjustment": 10,
-      "adjustment_reason": "Konteks revenue memang tumbuh, namun tidak cukup untuk menjustifikasi lonjakan biaya infrastruktur yang mencapai 45,35 z-score, sehingga risiko fraud tetap tinggi.",
-      "final_risk_score": 60,
-      "risk_level": "High Risk",
-      "recommendation": "Indikasi kecurangan. Butuh verifikasi manual (Manual Review)."
+      "llm_semantic_adjustment": 0,
+      "adjustment_reason": "",
+      "final_risk_score": 50,
+      "risk_level": "Medium Risk",
+      "recommendation": "Anomali ringan. Dicatat ke dalam audit report bulanan.",
+      "llm_review_failed": true
     }
   }
 ]

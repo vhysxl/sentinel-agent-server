@@ -28,10 +28,22 @@ dinilai. Karena itu jumlahnya harus 21: 20 normal + 1 outlier. Menilai outlier
 memakai 20 pembanding; menilai satu payroll normal juga memakai 20.
 Kurang dari itu dan seluruhnya berstatus `insufficient_baseline`.
 
+Dua mode, satu transaksi
+------------------------
+Nominal, tanggal, dan z-score outlier PERSIS SAMA di kedua mode. Yang berbeda
+hanya konteks bisnisnya. Jadi kalau hasil akhirnya berbeda, penyebabnya hanya
+bisa penilaian Agent 3 — bukan perhitungan, bukan data.
+
+    tanpa --boom : revenue stagnan. Bonus tidak punya penjelasan.
+                   Agent 3 semestinya memberi 0 atau positif.
+    dengan --boom: revenue melonjak di bulan yang sama. Bonus jadi masuk akal.
+                   Agent 3 semestinya memberi NEGATIF dan skornya turun.
+
 Pakai
 -----
-    python scripts/z_score_seed_test.py                # outlier default
-    python scripts/z_score_seed_test.py 45000000       # outlier sesuai keinginan
+    python scripts/z_score_seed_test.py                    # outlier default
+    python scripts/z_score_seed_test.py 45000000           # outlier sesuai keinginan
+    python scripts/z_score_seed_test.py 45000000 --boom    # + revenue melonjak
 
 MENGHAPUS SELURUH transaksi. Untuk mengembalikan data 6 kasus penerimaan:
     python scripts/seed_transactions.py
@@ -79,7 +91,33 @@ def insert(db, *, date, amount, description, user_id):
            "desc": description, "u": user_id}).scalar()
 
 
-def seed(outlier_amount: int):
+REVENUE_BASE = 800_000_000
+REVENUE_DRIFT = 1.01      # ~1% per bulan: stagnan
+REVENUE_BOOM = 1.48       # lonjakan di bulan outlier
+
+
+def seed_revenue(db, months: list[datetime], boom_month: str | None):
+    """
+    Mengisi monthly_revenue untuk seluruh bulan payroll.
+
+    Kalau `boom_month` diberikan, revenue melonjak di bulan itu DAN BERTAHAN
+    di bulan-bulan sesudahnya. Lonjakan yang tidak bertahan akan terbaca sebagai
+    kejatuhan pada bulan berikutnya, dan justru memberatkan transaksi yang
+    seharusnya dibela.
+    """
+    keys = sorted({m.strftime("%Y-%m-01") for m in months})
+    for i, key in enumerate(keys):
+        value = REVENUE_BASE * (REVENUE_DRIFT ** i)
+        if boom_month and key >= boom_month:
+            value *= REVENUE_BOOM
+        db.execute(text("""
+            INSERT INTO monthly_revenue (month, revenue) VALUES (:m, :r)
+            ON CONFLICT (month) DO UPDATE SET revenue = EXCLUDED.revenue
+        """), {"m": key, "r": round(value, 2)})
+    return keys
+
+
+def seed(outlier_amount: int, boom: bool = False):
     db = SessionLocal()
     try:
         users = [r[0] for r in db.execute(text("SELECT id FROM users ORDER BY id"))]
@@ -95,10 +133,11 @@ def seed(outlier_amount: int):
         db.commit()
 
         # --- 20 payroll bulanan, jam kerja, nominal rapat --------------------
-        normal_ids, amounts = [], []
+        normal_ids, amounts, months = [], [], []
         for i in range(NORMAL_COUNT):
             month = ANCHOR - timedelta(days=30 * (NORMAL_COUNT - i))
             date = to_weekday(month.replace(hour=10, minute=0, second=0, microsecond=0))
+            months.append(date)
             amount = round(random.uniform(BASE_AMOUNT * (1 - VARIATION),
                                           BASE_AMOUNT * (1 + VARIATION)), 2)
             amounts.append(amount)
@@ -113,17 +152,23 @@ def seed(outlier_amount: int):
             (ANCHOR - timedelta(days=5)).replace(hour=11, minute=0, second=0, microsecond=0))
         outlier_id = insert(
             db, date=outlier_date, amount=outlier_amount, user_id=PAYROLL_INPUTTERS[0],
-            description="Pembayaran gaji dan bonus khusus akhir periode")
+            description=("Pembayaran gaji beserta bonus kinerja karyawan "
+                         "atas pencapaian penjualan periode ini"))
+        months.append(outlier_date)
+
+        boom_month = outlier_date.strftime("%Y-%m-01") if boom else None
+        seed_revenue(db, months, boom_month)
         db.commit()
 
-        report(amounts, outlier_amount, outlier_id, normal_ids, outlier_date)
+        report(amounts, outlier_amount, outlier_id, normal_ids, outlier_date, boom)
     finally:
         db.close()
 
 
-def report(amounts, outlier_amount, outlier_id, normal_ids, outlier_date):
+def report(amounts, outlier_amount, outlier_id, normal_ids, outlier_date, boom=False):
     """Menghitung ulang dengan modul yang sama dengan scoring engine."""
     from app.engine.detectors import _z_points
+    from app.tools.financial import get_sales_trend
 
     print(f"\nDitanam {len(normal_ids)} payroll normal + 1 outlier "
           f"= {len(normal_ids) + 1} transaksi.\n")
@@ -162,6 +207,28 @@ def report(amounts, outlier_amount, outlier_id, normal_ids, outlier_date):
             print(f"  z >= {z:<5} -> +{points}   nominal >= {need:,.0f}")
         print(f"\n  python scripts/z_score_seed_test.py <nominal>")
 
+    # Konteks bisnis: inilah satu-satunya yang berbeda antara kedua mode.
+    trend = get_sales_trend(outlier_date.strftime("%Y-%m"))
+    print(f"\nKONTEKS REVENUE bulan {outlier_date:%Y-%m}  "
+          f"[mode: {'BOOM' if boom else 'stagnan'}]")
+    if trend.get("trend_percentage") is not None:
+        print(f"  revenue            : {trend['revenue']:,.0f}")
+        print(f"  bulan sebelumnya   : {trend['previous_month_revenue']:,.0f}")
+        print(f"  pertumbuhan        : {trend['trend_percentage']:+.2f}%")
+        print(f"  status             : {trend['status']}")
+    else:
+        print(f"  {trend.get('message', trend.get('status'))}")
+
+    print("\nYANG DIHARAPKAN dari Agent 3:")
+    if boom:
+        print("  Bonus terjustifikasi oleh lonjakan penjualan di bulan yang sama.")
+        print("  -> adjustment NEGATIF, skor akhir TURUN dari base.")
+        print("  -> Agent 3 wajib menyebut angka revenue di atas. Kalau tidak,")
+        print("     ia menebak, bukan memverifikasi.")
+    else:
+        print("  Klaim bonus tidak didukung data penjualan.")
+        print("  -> adjustment 0 atau POSITIF, skor akhir TETAP atau NAIK.")
+
     print("\nRentang analisis yang mencakup seluruh data:")
     print(f"  {(ANCHOR - timedelta(days=30 * 21)):%Y-%m-%d}  s/d  {ANCHOR:%Y-%m-%d}")
     print(f"\nHanya kategori '{CATEGORY}' tanpa vendor, jadi trigger duplikat, "
@@ -173,5 +240,6 @@ def report(amounts, outlier_amount, outlier_id, normal_ids, outlier_date):
 
 
 if __name__ == "__main__":
-    amount = int(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_OUTLIER
-    seed(amount)
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    amount = int(args[0]) if args else DEFAULT_OUTLIER
+    seed(amount, boom="--boom" in sys.argv)
