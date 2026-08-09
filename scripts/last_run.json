@@ -1,19 +1,20 @@
 [
   {
-    "transaction_id": 570,
+    "transaction_id": 640,
     "related_transaction_ids": [
-      570
+      640,
+      641
     ],
-    "finding": "Transaksi ID 570 sebesar Rp45.000.000 untuk pembayaran gaji dan bonus kinerja telah diverifikasi sebagai transaksi yang wajar dan sah. Analisis menunjukkan korelasi kuat antara lonjakan pengeluaran dengan pertumbuhan revenue perusahaan sebesar 49,48% pada Juli 2026 (dari Rp956.917.981 menjadi Rp1.430.400.997). Tidak ditemukan indikasi fraud; transaksi dilakukan oleh staf yang berwenang dan selaras dengan pola operasional perusahaan. Auditor disarankan untuk menyetujui transaksi ini tanpa tindakan lebih lanjut.",
+    "finding": "Transaksi ID 640 terbukti merupakan pembayaran ganda (duplicate payment) atas faktur INV-2026-0815 dengan total nilai Rp20.000.000,00. Meskipun secara nominal transaksi tunggal Rp10.000.000,00 terlihat wajar dibandingkan rata-rata kategori, fakta objektif mengenai duplikasi faktur dan waktu input di luar jam kerja mengindikasikan adanya risiko operasional atau fraud. Disarankan untuk melakukan pembatalan transaksi ganda dan audit internal terhadap user Yogi Ferdiansyah.",
     "investigation": {
       "agent1_verdict": "explainable",
       "agent1_confidence": "high",
-      "agent2_verdict": "explainable",
+      "agent2_verdict": "risk",
       "agent2_confidence": "high",
       "verdict_review": {
-        "agent1": "agreed",
+        "agent1": "rejected",
         "agent2": "agreed",
-        "reason": "Kedua detektif memberikan analisis yang konsisten dengan data objektif. Angka revenue yang disebutkan oleh kedua detektif (Rp1.430.400.997 dan Rp956.917.981) telah sesuai dengan konteks revenue yang diberikan. Bukti pendukung dari tren pengeluaran dan pola input user memperkuat justifikasi bisnis atas anomali statistik yang terdeteksi."
+        "reason": "Agent 1 mengabaikan fakta objektif mengenai duplikasi faktur yang telah dikonfirmasi oleh sistem. Agent 2 memberikan penilaian yang lebih akurat dengan mempertimbangkan bukti duplikasi dan pola perilaku user."
       }
     },
     "provenance": {
@@ -21,7 +22,8 @@
       "tools_used": [
         "compare_category_baseline",
         "get_monthly_expense_trend",
-        "get_user_spending_pattern"
+        "get_user_spending_pattern",
+        "get_vendor_transaction_history"
       ],
       "scored_by": "python_scoring_engine",
       "llm_model": "models/gemini-3.1-flash-lite",
@@ -30,47 +32,73 @@
     "evidence": {
       "objective": [
         {
-          "code": "z_score_anomaly",
-          "points": 50,
+          "code": "timing_outside_hours",
+          "points": 20,
           "owner": "agent_1_financial",
-          "amplifier_only": false,
-          "narrative": "Nominal 45,000,000 berada pada modified z-score 158.4 terhadap 20 transaksi pembanding (median 20,027,087, MAD 106,312, ambang 3.5). Baseline: category.",
+          "amplifier_only": true,
+          "narrative": "Transaksi dicatat ke sistem pada Wednesday 22-07-2026 02:30 WIB, di luar jam kerja (Senin-Jumat 08:00-17:59).",
           "detail": {
-            "scope": "category",
-            "method": "category_mad",
-            "n_baseline": 20,
-            "median": 20027086.8,
-            "mad": 106311.82,
-            "threshold": 3.5,
-            "computed_value": 158.44,
-            "confidence": "medium",
-            "is_anomaly": true,
-            "message": "Nominal 45,000,000 berada pada modified z-score 158.4 terhadap 20 transaksi pembanding (median 20,027,087, MAD 106,312, ambang 3.5). Baseline: category."
+            "evaluated_field": "created_at",
+            "reason": "waktu pencatatan ditulis server, tidak dapat diubah dari form",
+            "recorded_at_wib": "2026-07-22 02:30:00",
+            "time_wib": "02:30:00",
+            "weekday": "Wednesday",
+            "timezone": "Asia/Jakarta",
+            "work_hours": "08:00-17:59"
+          }
+        },
+        {
+          "code": "duplicate_confirmed",
+          "points": 50,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "Faktur INV-2026-0815 dibayar 2 kali ke vendor yang sama (total 20,000,000). Pembayaran pada 2026-07-22 10:00, 2026-07-22 10:00 WIB.",
+          "detail": {
+            "rule": "same_invoice_no",
+            "invoice_no": "INV-2026-0815",
+            "match_count": 2,
+            "total_amount": 20000000.0,
+            "transaction_ids": [
+              640,
+              641
+            ]
           }
         }
       ],
       "context": [
         {
-          "source": "get_monthly_expense_trend",
-          "insight": "Tren pengeluaran bulanan menunjukkan peningkatan biaya yang selaras dengan pertumbuhan revenue sebesar 49,48% pada periode Juli 2026."
+          "source": "compare_category_baseline",
+          "insight": "Nominal Rp10.000.000,00 sangat dekat dengan rata-rata kategori Logistics (Rp9.926.858,40) dengan z-score 0,14."
         },
         {
-          "source": "compare_category_baseline",
-          "insight": "Meskipun secara statistik nominal ini memiliki z-score tinggi (158,4) dibandingkan median kategori, hal ini dapat dijelaskan oleh adanya pembayaran bonus kinerja yang bersifat variabel mengikuti lonjakan revenue perusahaan."
+          "source": "get_monthly_expense_trend",
+          "insight": "Tren pengeluaran perusahaan stabil dengan total expense bulanan di kisaran Rp39,7 juta pada Juli 2026."
+        },
+        {
+          "source": "get_vendor_transaction_history",
+          "insight": "PT Mitra Logistik Nusantara adalah vendor rutin dengan rata-rata transaksi Rp9.930.921,82 dan total 18 transaksi."
         },
         {
           "source": "get_user_spending_pattern",
-          "insight": "User Yogi Ferdiansyah (ID 9) memiliki pola input yang konsisten dengan kategori operasional dan payroll, sehingga transaksi ini berada dalam lingkup kewenangannya."
+          "insight": "User Yogi Ferdiansyah (ID 9) memiliki pola transaksi yang tidak konsisten, di mana transaksi 10.000.000 ini jauh melampaui rata-rata input harian yang biasanya di bawah 5.000.000."
+        },
+        {
+          "source": "get_vendor_transaction_history",
+          "insight": "Vendor PT Mitra Logistik Nusantara (ID 7) memiliki riwayat transaksi yang stabil, sehingga duplikasi faktur INV-2026-0815 merupakan anomali yang tidak sesuai dengan pola penagihan vendor sebelumnya."
         },
         {
           "source": "get_monthly_expense_trend",
-          "insight": "Tren pengeluaran bulanan menunjukkan korelasi positif dengan peningkatan aktivitas bisnis dan pencapaian target penjualan perusahaan di bulan Juli 2026."
+          "insight": "Tren pengeluaran bulanan tidak menunjukkan lonjakan aktivitas logistik yang signifikan pada Juli 2026 yang dapat menjustifikasi pembayaran ganda tersebut."
         }
       ],
       "semantic": [
         {
           "source": "revenue_context",
-          "insight": "Revenue Juli 2026 sebesar Rp1.430.400.997, meningkat 49,48% dari bulan sebelumnya sebesar Rp956.917.981, memvalidasi kebutuhan pembayaran bonus kinerja."
+          "insight": "Tabel monthly_revenue kosong; tren revenue tidak dapat diverifikasi."
+        },
+        {
+          "source": "duplicate_confirmed",
+          "insight": "Faktur INV-2026-0815 terkonfirmasi dibayar dua kali dengan total Rp20.000.000,00."
         }
       ]
     },
@@ -78,35 +106,41 @@
       "agent1": {
         "verdict": "explainable",
         "confidence": "high",
-        "finding": "Transaksi sebesar 45.000.000 untuk kategori 'Payroll & Benefits' terindikasi wajar dan berkorelasi dengan pertumbuhan bisnis. Data menunjukkan revenue perusahaan meningkat signifikan sebesar 49,48% (dari 956,9 juta menjadi 1,43 miliar) pada bulan Juli 2026. Tren pengeluaran bulanan juga menunjukkan kenaikan biaya operasional yang sejalan dengan peningkatan aktivitas bisnis tersebut, sehingga pembayaran bonus kinerja karyawan atas pencapaian penjualan merupakan tindakan yang logis dan konsisten dengan performa perusahaan.",
+        "finding": "Transaksi sebesar Rp10.000.000,00 untuk PT Mitra Logistik Nusantara dikategorikan wajar. Nominal transaksi berada dalam rentang baseline kategori Logistics (mean: Rp9.926.858,40; z-score: 0,14). Tren pengeluaran perusahaan secara keseluruhan stabil (growth: 2,26%). Meskipun terdapat catatan waktu input di luar jam kerja, vendor ini merupakan mitra rutin dengan histori transaksi yang konsisten (mean: Rp9.930.921,82) dan aktivitas serupa sering dilakukan dalam periode tutup buku.",
         "provenance": {
           "generated_by": "Agent_1_Financial_Analytics",
           "tools_used": [
             "get_monthly_expense_trend",
-            "compare_category_baseline"
+            "compare_category_baseline",
+            "get_vendor_transaction_history"
           ]
         },
         "evidence": {
           "context": [
             {
-              "source": "get_monthly_expense_trend",
-              "insight": "Tren pengeluaran bulanan menunjukkan peningkatan biaya yang selaras dengan pertumbuhan revenue sebesar 49,48% pada periode Juli 2026."
+              "source": "compare_category_baseline",
+              "insight": "Nominal Rp10.000.000,00 sangat dekat dengan rata-rata kategori Logistics (Rp9.926.858,40) dengan z-score 0,14."
             },
             {
-              "source": "compare_category_baseline",
-              "insight": "Meskipun secara statistik nominal ini memiliki z-score tinggi (158,4) dibandingkan median kategori, hal ini dapat dijelaskan oleh adanya pembayaran bonus kinerja yang bersifat variabel mengikuti lonjakan revenue perusahaan."
+              "source": "get_monthly_expense_trend",
+              "insight": "Tren pengeluaran perusahaan stabil dengan total expense bulanan di kisaran Rp39,7 juta pada Juli 2026."
+            },
+            {
+              "source": "get_vendor_transaction_history",
+              "insight": "PT Mitra Logistik Nusantara adalah vendor rutin dengan rata-rata transaksi Rp9.930.921,82 dan total 18 transaksi."
             }
           ]
         }
       },
       "agent2": {
-        "verdict": "explainable",
+        "verdict": "risk",
         "confidence": "high",
-        "finding": "Transaksi sebesar Rp45.000.000 untuk kategori 'Payroll & Benefits' memiliki penjelasan yang logis. Berdasarkan data, perusahaan mengalami pertumbuhan revenue yang signifikan sebesar 49,48% pada bulan Juli 2026 (Rp1.430.400.997 dibandingkan Rp956.917.981 pada bulan sebelumnya). Lonjakan biaya ini selaras dengan deskripsi transaksi yang menyebutkan adanya pembayaran gaji beserta bonus kinerja atas pencapaian penjualan tersebut.",
+        "finding": "Terdapat pelanggaran duplicate_confirmed pada faktur INV-2026-0815 dengan total pembayaran ganda sebesar 20.000.000 (dua kali transaksi masing-masing 10.000.000). Tidak ditemukan penjelasan sah atas duplikasi ini, dan pola transaksi penginput menunjukkan ketidakteraturan dalam nominal yang diproses.",
         "provenance": {
           "generated_by": "Agent_2_Fraud_Investigator",
           "tools_used": [
             "get_user_spending_pattern",
+            "get_vendor_transaction_history",
             "get_monthly_expense_trend"
           ]
         },
@@ -114,82 +148,113 @@
           "context": [
             {
               "source": "get_user_spending_pattern",
-              "insight": "User Yogi Ferdiansyah (ID 9) memiliki pola input yang konsisten dengan kategori operasional dan payroll, sehingga transaksi ini berada dalam lingkup kewenangannya."
+              "insight": "User Yogi Ferdiansyah (ID 9) memiliki pola transaksi yang tidak konsisten, di mana transaksi 10.000.000 ini jauh melampaui rata-rata input harian yang biasanya di bawah 5.000.000."
+            },
+            {
+              "source": "get_vendor_transaction_history",
+              "insight": "Vendor PT Mitra Logistik Nusantara (ID 7) memiliki riwayat transaksi yang stabil, sehingga duplikasi faktur INV-2026-0815 merupakan anomali yang tidak sesuai dengan pola penagihan vendor sebelumnya."
             },
             {
               "source": "get_monthly_expense_trend",
-              "insight": "Tren pengeluaran bulanan menunjukkan korelasi positif dengan peningkatan aktivitas bisnis dan pencapaian target penjualan perusahaan di bulan Juli 2026."
+              "insight": "Tren pengeluaran bulanan tidak menunjukkan lonjakan aktivitas logistik yang signifikan pada Juli 2026 yang dapat menjustifikasi pembayaran ganda tersebut."
             }
           ]
         }
       },
       "agent3": {
-        "finding": "Transaksi ID 570 sebesar Rp45.000.000 untuk pembayaran gaji dan bonus kinerja telah diverifikasi sebagai transaksi yang wajar dan sah. Analisis menunjukkan korelasi kuat antara lonjakan pengeluaran dengan pertumbuhan revenue perusahaan sebesar 49,48% pada Juli 2026 (dari Rp956.917.981 menjadi Rp1.430.400.997). Tidak ditemukan indikasi fraud; transaksi dilakukan oleh staf yang berwenang dan selaras dengan pola operasional perusahaan. Auditor disarankan untuk menyetujui transaksi ini tanpa tindakan lebih lanjut.",
+        "finding": "Transaksi ID 640 terbukti merupakan pembayaran ganda (duplicate payment) atas faktur INV-2026-0815 dengan total nilai Rp20.000.000,00. Meskipun secara nominal transaksi tunggal Rp10.000.000,00 terlihat wajar dibandingkan rata-rata kategori, fakta objektif mengenai duplikasi faktur dan waktu input di luar jam kerja mengindikasikan adanya risiko operasional atau fraud. Disarankan untuk melakukan pembatalan transaksi ganda dan audit internal terhadap user Yogi Ferdiansyah.",
         "verdict_review": {
-          "agent1": "agreed",
+          "agent1": "rejected",
           "agent2": "agreed",
-          "reason": "Kedua detektif memberikan analisis yang konsisten dengan data objektif. Angka revenue yang disebutkan oleh kedua detektif (Rp1.430.400.997 dan Rp956.917.981) telah sesuai dengan konteks revenue yang diberikan. Bukti pendukung dari tren pengeluaran dan pola input user memperkuat justifikasi bisnis atas anomali statistik yang terdeteksi."
+          "reason": "Agent 1 mengabaikan fakta objektif mengenai duplikasi faktur yang telah dikonfirmasi oleh sistem. Agent 2 memberikan penilaian yang lebih akurat dengan mempertimbangkan bukti duplikasi dan pola perilaku user."
         },
         "provenance": {
           "generated_by": "Agent_3_Evidence_Review",
           "tools_used": [
-            "get_monthly_expense_trend",
             "compare_category_baseline",
-            "get_user_spending_pattern"
+            "get_vendor_transaction_history"
           ]
         },
         "evidence": {
           "semantic": [
             {
               "source": "revenue_context",
-              "insight": "Revenue Juli 2026 sebesar Rp1.430.400.997, meningkat 49,48% dari bulan sebelumnya sebesar Rp956.917.981, memvalidasi kebutuhan pembayaran bonus kinerja."
+              "insight": "Tabel monthly_revenue kosong; tren revenue tidak dapat diverifikasi."
+            },
+            {
+              "source": "duplicate_confirmed",
+              "insight": "Faktur INV-2026-0815 terkonfirmasi dibayar dua kali dengan total Rp20.000.000,00."
             }
           ]
         },
         "scoring": {
-          "llm_semantic_adjustment": -15,
-          "adjustment_reason": "Penyesuaian negatif diberikan karena bukti bisnis (pertumbuhan revenue 49,48% menjadi Rp1.430.400.997) secara kuat membenarkan anomali statistik yang terdeteksi."
+          "llm_semantic_adjustment": 15,
+          "adjustment_reason": "Penyesuaian positif diberikan karena bukti duplikasi faktur dan input di luar jam kerja secara signifikan meningkatkan profil risiko transaksi, membantah argumen kewajaran bisnis dari Agent 1."
         }
       }
     },
     "scoring": {
-      "base_risk_score": 50,
-      "raw_score": 50,
+      "base_risk_score": 70,
+      "raw_score": 70,
       "capped": false,
       "max_base_score": 80,
       "agent_scores": [
         {
           "agent": "agent_1_financial",
+          "score": 20
+        },
+        {
+          "agent": "agent_2_fraud",
           "score": 50
         }
       ],
       "objective_triggers": [
         {
-          "code": "z_score_anomaly",
-          "points": 50,
+          "code": "timing_outside_hours",
+          "points": 20,
           "owner": "agent_1_financial",
-          "amplifier_only": false,
-          "narrative": "Nominal 45,000,000 berada pada modified z-score 158.4 terhadap 20 transaksi pembanding (median 20,027,087, MAD 106,312, ambang 3.5). Baseline: category.",
+          "amplifier_only": true,
+          "narrative": "Transaksi dicatat ke sistem pada Wednesday 22-07-2026 02:30 WIB, di luar jam kerja (Senin-Jumat 08:00-17:59).",
           "detail": {
-            "scope": "category",
-            "method": "category_mad",
-            "n_baseline": 20,
-            "median": 20027086.8,
-            "mad": 106311.82,
-            "threshold": 3.5,
-            "computed_value": 158.44,
-            "confidence": "medium",
-            "is_anomaly": true,
-            "message": "Nominal 45,000,000 berada pada modified z-score 158.4 terhadap 20 transaksi pembanding (median 20,027,087, MAD 106,312, ambang 3.5). Baseline: category."
+            "evaluated_field": "created_at",
+            "reason": "waktu pencatatan ditulis server, tidak dapat diubah dari form",
+            "recorded_at_wib": "2026-07-22 02:30:00",
+            "time_wib": "02:30:00",
+            "weekday": "Wednesday",
+            "timezone": "Asia/Jakarta",
+            "work_hours": "08:00-17:59"
+          }
+        },
+        {
+          "code": "duplicate_confirmed",
+          "points": 50,
+          "owner": "agent_2_fraud",
+          "amplifier_only": false,
+          "narrative": "Faktur INV-2026-0815 dibayar 2 kali ke vendor yang sama (total 20,000,000). Pembayaran pada 2026-07-22 10:00, 2026-07-22 10:00 WIB.",
+          "detail": {
+            "rule": "same_invoice_no",
+            "invoice_no": "INV-2026-0815",
+            "match_count": 2,
+            "total_amount": 20000000.0,
+            "transaction_ids": [
+              640,
+              641
+            ]
           }
         }
       ],
-      "suppressed_triggers": [],
-      "llm_semantic_adjustment": -15,
-      "adjustment_reason": "Penyesuaian negatif diberikan karena bukti bisnis (pertumbuhan revenue 49,48% menjadi Rp1.430.400.997) secara kuat membenarkan anomali statistik yang terdeteksi.",
-      "final_risk_score": 35,
-      "risk_level": "Low Risk",
-      "recommendation": "Transaksi wajar. Otomatis disetujui (No Action)."
+      "suppressed_triggers": [
+        {
+          "code": "timing_outside_hours",
+          "points": 20,
+          "reason": "trigger eksklusif dengan poin lebih rendah"
+        }
+      ],
+      "llm_semantic_adjustment": 15,
+      "adjustment_reason": "Penyesuaian positif diberikan karena bukti duplikasi faktur dan input di luar jam kerja secara signifikan meningkatkan profil risiko transaksi, membantah argumen kewajaran bisnis dari Agent 1.",
+      "final_risk_score": 85,
+      "risk_level": "Critical Risk",
+      "recommendation": "Indikasi fraud fatal. Eskalasi darurat ke Manajer/CFO."
     }
   }
 ]
