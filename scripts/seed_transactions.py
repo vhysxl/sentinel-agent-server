@@ -11,8 +11,10 @@ ATURAN KERAS
    namanya belum ada.
 3. Hanya `transactions` dan `monthly_revenue` yang dikosongkan lalu diisi ulang,
    sehingga skrip ini dapat dijalankan berulang dengan hasil identik.
-4. Semua waktu SADAR-ZONA WIB. Kolom transaction_date bertipe timestamptz dan
-   server database ber-timezone GMT; menulis waktu naif akan bergeser 7 jam.
+4. Semua waktu SADAR-ZONA WIB. created_at bertipe timestamptz dan server
+   database ber-timezone GMT; menulis waktu naif akan bergeser 7 jam.
+5. Hanya ada SATU waktu per transaksi: created_at, yaitu saat tercatat dari API
+   bank. transaction_date diisi nilai yang sama semata-mata karena NOT NULL.
 
 Menanam 6 kasus uji dengan jawaban yang sudah diketahui. Lihat PLAN.md §10.
 """
@@ -80,18 +82,17 @@ def get_or_create_vendor(db, name: str, status: str) -> int:
 
 
 def insert_tx(db, *, date, amount, ttype, category, description,
-              vendor_id, user_id, invoice_no=None, recorded_at=None) -> int:
+              vendor_id, user_id, invoice_no=None) -> int:
     """
-    `recorded_at` mengisi kolom created_at.
+    `date` adalah SATU-SATUNYA waktu: kapan transaksi tercatat dari API bank.
 
-    Di produksi kolom itu diisi server lewat DEFAULT now() dan tidak pernah
-    dikirim dari form. Di seed ia HARUS ditulis eksplisit: kalau dibiarkan
-    default, seluruh 68 baris akan bernilai "saat skrip dijalankan", sehingga
-    aturan jam kerja menilai hal yang sama untuk semua baris dan tidak menguji
-    apa pun.
+    Ditulis ke created_at (yang dibaca seluruh sistem) sekaligus ke
+    transaction_date (kolom warisan milik aplikasi Next.js yang NOT NULL).
+    Keduanya selalu sama.
 
-    Bila tidak diberikan, disamakan dengan waktu transaksi — memodelkan tim yang
-    mencatat saat itu juga.
+    Di seed nilainya HARUS eksplisit. Kalau dibiarkan DEFAULT now(), seluruh
+    baris bernilai "saat skrip dijalankan", sehingga aturan jam kerja menilai
+    hal yang sama untuk semuanya dan tidak menguji apa pun.
     """
     return db.execute(
         text("""
@@ -101,7 +102,7 @@ def insert_tx(db, *, date, amount, ttype, category, description,
             VALUES (:d, :rec, :a, :t, :c, :desc, :inv, :v, :u)
             RETURNING id
         """),
-        {"d": date, "rec": recorded_at or date, "a": amount, "t": ttype,
+        {"d": date, "rec": date, "a": amount, "t": ttype,
          "c": category, "desc": description, "inv": invoice_no,
          "v": vendor_id, "u": user_id},
     ).scalar()
@@ -293,7 +294,7 @@ def seed():
             UPDATE vendors v
             SET join_date = sub.first_tx - INTERVAL '30 days'
             FROM (
-                SELECT vendor_id, MIN(transaction_date) AS first_tx
+                SELECT vendor_id, MIN(created_at) AS first_tx
                 FROM transactions WHERE vendor_id IS NOT NULL
                 GROUP BY vendor_id
             ) sub

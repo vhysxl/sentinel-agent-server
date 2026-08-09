@@ -36,7 +36,7 @@ def run_financial_investigator(transaction_id: int, facts: dict | None = None):
     facts = facts or {}
     transaction = facts.get("transaction", {})
     triggers = facts.get("triggers", [])
-    month = str(transaction.get("transaction_date", ""))[:7]
+    month = str(transaction.get("recorded_at", ""))[:7]
 
     revenue = facts.get("revenue_context") or {}
     revenue_block = (json.dumps(revenue, indent=2, ensure_ascii=False, default=str)

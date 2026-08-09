@@ -8,8 +8,9 @@ mana yang dipakainya. Lihat PLAN.md untuk alasan tiap angka.
 from zoneinfo import ZoneInfo
 
 # --- Zona waktu -------------------------------------------------------------
-# transaction_date bertipe timestamptz. Server database ber-timezone GMT, jadi
-# setiap pembacaan jam WAJIB dikonversi ke WIB dulu; jangan pernah mengandalkan
+# created_at bertipe timestamptz dan merupakan SATU-SATUNYA waktu di sistem ini
+# (transaksi masuk dari API bank). Server database ber-timezone GMT, jadi setiap
+# pembacaan jam WAJIB dikonversi ke WIB dulu; jangan pernah mengandalkan
 # timezone sesi. Lihat PLAN.md §6.4.
 WIB = ZoneInfo("Asia/Jakarta")
 

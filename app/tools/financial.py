@@ -206,18 +206,21 @@ def get_vendor_transaction_history(vendor_id: int) -> Dict[str, Any]:
             func.count(Transaction.id).label("total_transactions"),
             func.avg(Transaction.amount).label("mean_amount"),
             func.sum(Transaction.amount).label("total_amount"),
-            func.min(Transaction.transaction_date).label("first_transaction_date"),
-            func.max(Transaction.transaction_date).label("last_transaction_date")
+            func.min(Transaction.created_at).label("first_transaction_date"),
+            func.max(Transaction.created_at).label("last_transaction_date")
         ).filter(Transaction.vendor_id == vendor_id).first()
 
         total_transactions = int(stats.total_transactions or 0)
         status = "new_vendor" if total_transactions < 3 else "established_vendor"
 
         recent_sql = text("""
-            SELECT id, transaction_date, amount, type, category, description
+            SELECT id,
+                   to_char(created_at AT TIME ZONE 'Asia/Jakarta',
+                           'YYYY-MM-DD HH24:MI') AS recorded_wib,
+                   amount, type, category, description
             FROM transactions
             WHERE vendor_id = :vendor_id
-            ORDER BY transaction_date DESC
+            ORDER BY created_at DESC
             LIMIT 5
         """)
         recent_rows = db.execute(recent_sql, {"vendor_id": vendor_id}).fetchall()
@@ -236,7 +239,7 @@ def get_vendor_transaction_history(vendor_id: int) -> Dict[str, Any]:
             "recent_transactions": [
                 {
                     "transaction_id": row[0],
-                    "transaction_date": str(row[1]),
+                    "recorded_at": str(row[1]),
                     "amount": float(row[2]),
                     "type": row[3],
                     "category": row[4],
@@ -250,11 +253,11 @@ def get_vendor_transaction_history(vendor_id: int) -> Dict[str, Any]:
 
 def check_transaction_timing(transaction_id: int) -> Dict[str, Any]:
     """
-    Mengecek apakah transaksi DICATAT ke sistem di dalam atau di luar jam kerja
-    (WIB). Jam kerja = Senin-Jumat 08:00-17:59.
+    Mengecek apakah transaksi terjadi di dalam atau di luar jam kerja (WIB).
+    Jam kerja = Senin-Jumat 08:00-17:59.
 
-    Yang dinilai adalah `created_at` (waktu pencatatan, ditulis server), bukan
-    `transaction_date` (tanggal yang diketik pengguna).
+    Sistem hanya punya satu waktu: `created_at`, yaitu saat transaksi tercatat
+    dari API bank. Itulah kapan transaksi terjadi.
     """
     db = SessionLocal()
     try:
@@ -265,8 +268,7 @@ def check_transaction_timing(transaction_id: int) -> Dict[str, Any]:
         # WAJIB dikonversi ke WIB dulu. Kolomnya timestamptz dan server database
         # ber-timezone GMT, jadi membaca jam langsung menghasilkan jam UTC —
         # 09:00 WIB akan terbaca 02:00 dan salah ditandai sebagai tengah malam.
-        recorded = txn.created_at or txn.transaction_date
-        local = recorded.astimezone(WIB)
+        local = txn.created_at.astimezone(WIB)
 
         is_workday = local.weekday() < 5
         is_workhour = WORK_START_HOUR <= local.hour < WORK_END_HOUR
@@ -276,7 +278,6 @@ def check_transaction_timing(transaction_id: int) -> Dict[str, Any]:
             "transaction_id": transaction_id,
             "evaluated_field": "created_at",
             "recorded_at_wib": local.strftime("%Y-%m-%d %H:%M:%S"),
-            "business_date_wib": txn.transaction_date.astimezone(WIB).strftime("%Y-%m-%d %H:%M:%S"),
             "weekday": local.strftime("%A"),
             "time_wib": local.strftime("%H:%M:%S"),
             "timezone": "Asia/Jakarta",
@@ -369,16 +370,16 @@ def get_monthly_expense_trend(months: int = 6) -> Dict[str, Any]:
         # bulan sebelumnya seperti kalau dikelompokkan dalam UTC.
         sql = text("""
             SELECT
-                DATE_TRUNC('month', t.transaction_date AT TIME ZONE 'Asia/Jakarta') AS month,
+                DATE_TRUNC('month', t.created_at AT TIME ZONE 'Asia/Jakarta') AS month,
                 COUNT(*) AS transaction_count,
                 SUM(t.amount) AS total_expense,
                 AVG(t.amount) AS mean_expense
             FROM transactions t
             WHERE t.type = 'expense'
-              AND t.transaction_date >= (
-                  SELECT MAX(transaction_date) FROM transactions
+              AND t.created_at >= (
+                  SELECT MAX(created_at) FROM transactions
               ) - (:months || ' months')::interval
-            GROUP BY DATE_TRUNC('month', t.transaction_date AT TIME ZONE 'Asia/Jakarta')
+            GROUP BY DATE_TRUNC('month', t.created_at AT TIME ZONE 'Asia/Jakarta')
             ORDER BY month
         """)
         rows = db.execute(sql, {"months": months}).fetchall()
@@ -424,11 +425,10 @@ def get_transaction_details(transaction_id: int) -> dict:
     try:
         sql = text("""
             SELECT t.id,
-                   t.transaction_date AT TIME ZONE 'Asia/Jakarta' AS date_wib,
+                   t.created_at AT TIME ZONE 'Asia/Jakarta' AS recorded_wib,
                    t.amount, t.type, t.category, t.description, t.invoice_no,
                    t.vendor_id, v.vendor_name, v.status AS vendor_status,
-                   t.input_by_user_id, u.fullname, u.is_admin,
-                   t.created_at AT TIME ZONE 'Asia/Jakarta' AS recorded_wib
+                   t.input_by_user_id, u.fullname, u.is_admin
             FROM transactions t
             LEFT JOIN vendors v ON t.vendor_id = v.id
             LEFT JOIN users u ON t.input_by_user_id = u.id
@@ -440,10 +440,10 @@ def get_transaction_details(transaction_id: int) -> dict:
 
         return {
             "transaction_id": result[0],
-            # Kapan transaksi terjadi menurut pengguna (untuk baseline & jendela).
-            "transaction_date": str(result[1]),
-            # Kapan dicatat ke sistem, ditulis server. Ini yang dinilai aturan jam.
-            "recorded_at": str(result[13]),
+            # SATU-SATUNYA waktu di sistem ini: saat transaksi tercatat dari API
+            # bank. Dipakai untuk segalanya -- jam kerja, jendela duplikat,
+            # jendela split payment, dan pengelompokan bulan.
+            "recorded_at": str(result[1]),
             "timezone": "Asia/Jakarta",
             "amount": float(result[2]),
             "type": result[3],

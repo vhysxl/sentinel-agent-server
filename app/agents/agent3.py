@@ -54,7 +54,7 @@ def run_evidence_reviewer(transaction_id: int, agent1_findings: dict,
                           facts: dict | None = None):
     facts = facts or {}
     transaction = facts.get("transaction", {})
-    month = str(transaction.get("transaction_date", ""))[:7]
+    month = str(transaction.get("recorded_at", ""))[:7]
 
     revenue = facts.get("revenue_context") or {}
     revenue_block = (json.dumps(revenue, indent=2, ensure_ascii=False, default=str)

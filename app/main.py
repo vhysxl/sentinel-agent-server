@@ -68,7 +68,7 @@ def extract_candidates(db, start_date: str, end_date: str) -> dict[int, list]:
     """
     # Rentang dibandingkan sebagai TANGGAL WIB, dan end_date bersifat INKLUSIF.
     #
-    # Perbandingan langsung `transaction_date <= :end_date` salah dua kali:
+    # Perbandingan langsung `created_at <= :end_date` salah dua kali:
     # (1) string tanggal dikonversi menjadi 00:00:00, sehingga rentang
     #     "12 Juni sampai 12 Juni" membuang transaksi pukul 14:20 pada hari itu
     #     dan mengembalikan nol temuan;
@@ -77,7 +77,7 @@ def extract_candidates(db, start_date: str, end_date: str) -> dict[int, list]:
     ids = [r[0] for r in db.execute(text("""
         SELECT id FROM transactions
         WHERE type = 'expense'
-          AND (transaction_date AT TIME ZONE 'Asia/Jakarta')::date
+          AND (created_at AT TIME ZONE 'Asia/Jakarta')::date
               BETWEEN CAST(:start_date AS DATE) AND CAST(:end_date AS DATE)
         ORDER BY id
     """), {"start_date": start_date, "end_date": end_date})]
@@ -151,7 +151,7 @@ def build_facts(db, transaction_id: int, triggers: list, owner: str) -> dict:
     menghitungnya, Python yang menaruhnya.
     """
     transaction = get_transaction_details(transaction_id)
-    month = str(transaction.get("transaction_date", ""))[:7]
+    month = str(transaction.get("recorded_at", ""))[:7]
 
     return {
         "transaction": transaction,

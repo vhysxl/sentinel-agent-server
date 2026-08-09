@@ -16,13 +16,11 @@ Isolasinya dijaga dengan sengaja
     - Nominalnya di luar pita split payment -> split_payment mati
 Jadi kalau skor bergerak, penyebabnya hanya duplikat dan jam.
 
-Yang paling menarik diperhatikan
---------------------------------
-`transaction_date` dibuat WAJAR (Senin 10:00) sementara `created_at` dini hari.
-Inilah skenario penghindaran yang sesungguhnya: pelaku mengetik tanggal yang
-tidak mencurigakan untuk transaksi yang ia input pukul 02:30. Aturan jam membaca
-`created_at` — ditulis server, tidak bisa disentuh dari form — sehingga
-mengetik tanggal wajar tidak menolongnya.
+Satu waktu saja
+---------------
+Transaksi masuk dari API bank, jadi saat bank mencatatnya ITULAH saat transaksi
+terjadi. Tidak ada tanggal terpisah yang diketik pengguna. `created_at` menjawab
+segalanya: kapan terjadi, dan apakah di dalam jam kerja.
 
 Mode
 ----
@@ -94,15 +92,17 @@ def get_or_create_vendor(db, name, status="active"):
            "s": status}).scalar()
 
 
-def insert(db, *, date, recorded_at, amount, description,
+def insert(db, *, date, amount, description,
            vendor_id, user_id, invoice_no=None):
+    """`date` ditulis ke created_at (dibaca sistem) sekaligus transaction_date
+    (kolom warisan yang NOT NULL). Keduanya selalu sama."""
     return db.execute(text("""
         INSERT INTO transactions
             (transaction_date, created_at, amount, type, category,
              description, invoice_no, vendor_id, input_by_user_id)
-        VALUES (:d, :rec, :a, 'expense', :c, :desc, :inv, :v, :u)
+        VALUES (:d, :d, :a, 'expense', :c, :desc, :inv, :v, :u)
         RETURNING id
-    """), {"d": date, "rec": recorded_at, "a": amount, "c": CATEGORY,
+    """), {"d": date, "a": amount, "c": CATEGORY,
            "desc": description, "inv": invoice_no,
            "v": vendor_id, "u": user_id}).scalar()
 
@@ -132,34 +132,33 @@ def seed(mode: str):
             amount = round(random.uniform(BASE_AMOUNT * (1 - VARIATION),
                                           BASE_AMOUNT * (1 + VARIATION)), 2)
             amounts.append(amount)
-            insert(db, date=d, recorded_at=d, amount=amount,
+            insert(db, date=d, amount=amount,
                    description=f"Biaya pengiriman rutin periode {d:%Y-%m}",
                    vendor_id=vendor_id, user_id=random.choice(STAFF_IDS))
 
         # --- Duplikat: faktur SAMA dibayar dua kali --------------------------
-        # transaction_date sengaja dibuat wajar; yang ganjil hanya created_at.
-        biz_date = to_weekday((ANCHOR - timedelta(days=10))
+        base_day = to_weekday((ANCHOR - timedelta(days=10))
                               .replace(hour=10, minute=0, second=0, microsecond=0))
 
         if mode == "workhours":
-            rec1 = biz_date.replace(hour=10, minute=15)
-            rec2 = biz_date.replace(hour=14, minute=40)
+            rec1 = base_day.replace(hour=10, minute=15)
+            rec2 = base_day.replace(hour=14, minute=40)
             label = "jam kerja (amplifier jam MATI)"
         elif mode == "weekend":
-            sat = to_saturday(biz_date)
+            sat = to_saturday(base_day)
             rec1 = sat.replace(hour=14, minute=5)
             rec2 = sat.replace(hour=15, minute=50)
             label = "Sabtu siang"
         else:
-            rec1 = biz_date.replace(hour=2, minute=30)
-            rec2 = biz_date.replace(hour=3, minute=10)
+            rec1 = base_day.replace(hour=2, minute=30)
+            rec2 = base_day.replace(hour=3, minute=10)
             label = "dini hari 02:30"
 
         dup_ids = [
-            insert(db, date=biz_date, recorded_at=rec1, amount=DUPLICATE_AMOUNT,
+            insert(db, date=rec1, amount=DUPLICATE_AMOUNT,
                    description=f"Pembayaran jasa pengiriman ({INVOICE})",
                    invoice_no=INVOICE, vendor_id=vendor_id, user_id=STAFF_IDS[0]),
-            insert(db, date=biz_date, recorded_at=rec2, amount=DUPLICATE_AMOUNT,
+            insert(db, date=rec2, amount=DUPLICATE_AMOUNT,
                    description=f"Pembayaran jasa pengiriman ({INVOICE})",
                    invoice_no=INVOICE, vendor_id=vendor_id, user_id=STAFF_IDS[0]),
         ]
@@ -169,19 +168,19 @@ def seed(mode: str):
         ctrl_date = to_weekday((ANCHOR - timedelta(days=6))
                                .replace(hour=11, minute=0, second=0, microsecond=0))
         ctrl_id = insert(
-            db, date=ctrl_date, recorded_at=ctrl_date.replace(hour=1, minute=45),
+            db, date=ctrl_date.replace(hour=1, minute=45),
             amount=round(random.uniform(BASE_AMOUNT * 0.9, BASE_AMOUNT * 1.1), 2),
             description="Biaya pengiriman, diinput saat lembur tutup buku",
             invoice_no="INV-2026-0899", vendor_id=vendor_id,
             user_id=random.choice(STAFF_IDS))
         db.commit()
 
-        report(db, vendor_id, amounts, dup_ids, ctrl_id, biz_date, rec1, label, mode)
+        report(db, vendor_id, amounts, dup_ids, ctrl_id, rec1, label, mode)
     finally:
         db.close()
 
 
-def report(db, vendor_id, amounts, dup_ids, ctrl_id, biz_date, rec1, label, mode):
+def report(db, vendor_id, amounts, dup_ids, ctrl_id, rec1, label, mode):
     from app.db.models import Transaction
     from app.engine import detectors
     from app.engine.scoring import calculate_base_score, risk_decision
@@ -200,8 +199,7 @@ def report(db, vendor_id, amounts, dup_ids, ctrl_id, biz_date, rec1, label, mode
 
     print(f"\nDUPLIKAT  id {dup_ids}")
     print(f"  faktur              : {INVOICE}  (SAMA pada kedua baris)")
-    print(f"  tanggal transaksi   : {biz_date:%Y-%m-%d %H:%M} ({biz_date:%A})  <- terlihat wajar")
-    print(f"  DICATAT ke sistem   : {rec1:%Y-%m-%d %H:%M} ({rec1:%A})  <- yang dinilai aturan jam")
+    print(f"  tercatat dari bank  : {rec1:%Y-%m-%d %H:%M} ({rec1:%A})")
 
     for tid in dup_ids + [ctrl_id]:
         txn = db.query(Transaction).filter(Transaction.id == tid).first()

@@ -119,20 +119,17 @@ def detect_timing(db, txn) -> Optional[Trigger]:
     """
     Baris dicatat ke sistem di luar jam kerja (Senin-Jumat 08:00-17:59 WIB).
 
-    Membaca `created_at`, BUKAN `transaction_date`. Bedanya menentukan:
-    `transaction_date` diketik dari form, sehingga pelaku tinggal mengetik jam
-    10:00 untuk sesuatu yang ia input pukul 02:00 dan aturan ini jadi tidak
-    berguna. `created_at` ditulis server dan tidak bisa disentuh dari form.
-
-    Pertanyaan yang dijawab: "kapan orang ini membuka aplikasi dan mengetik?"
+    Membaca `created_at` — satu-satunya waktu yang dimiliki sistem ini.
+    Transaksi berasal dari API bank, jadi saat bank mencatatnya ITULAH saat
+    transaksi terjadi. Tidak ada tanggal terpisah yang diketik pengguna, dan
+    karena itu tidak ada yang bisa dipalsukan dengan mengetik.
 
     AMPLIFIER SAJA. Transaksi tidak pernah menjadi temuan hanya karena jamnya.
     Setiap tim keuangan punya orang yang lembur menjelang tutup buku; kalau jam
     saja bisa menciptakan temuan, daftar temuan akan didominasi entri yang
     semuanya sah dan orang berhenti membacanya.
     """
-    recorded = txn.created_at or txn.transaction_date
-    local = recorded.astimezone(WIB)
+    local = txn.created_at.astimezone(WIB)
     if local.weekday() < 5 and WORK_START_HOUR <= local.hour < WORK_END_HOUR:
         return None
 
@@ -180,11 +177,11 @@ def detect_duplicate(db, txn) -> Optional[Trigger]:
     if txn.invoice_no:
         rows = db.execute(text("""
             SELECT id, amount,
-                   to_char(transaction_date AT TIME ZONE 'Asia/Jakarta',
+                   to_char(created_at AT TIME ZONE 'Asia/Jakarta',
                            'YYYY-MM-DD HH24:MI') AS wib
             FROM transactions
             WHERE vendor_id = :v AND invoice_no = :inv AND type = 'expense'
-            ORDER BY transaction_date
+            ORDER BY created_at
         """), {"v": txn.vendor_id, "inv": txn.invoice_no}).fetchall()
 
         if len(rows) > 1:
@@ -208,16 +205,16 @@ def detect_duplicate(db, txn) -> Optional[Trigger]:
 
     # Tidak ada nomor faktur: turun ke aturan lemah.
     rows = db.execute(text("""
-        SELECT id, to_char(transaction_date AT TIME ZONE 'Asia/Jakarta',
+        SELECT id, to_char(created_at AT TIME ZONE 'Asia/Jakarta',
                            'YYYY-MM-DD HH24:MI')
         FROM transactions
         WHERE vendor_id = :v AND amount = :a AND type = 'expense'
-          AND transaction_date BETWEEN :lo AND :hi
-        ORDER BY transaction_date
+          AND created_at BETWEEN :lo AND :hi
+        ORDER BY created_at
     """), {
         "v": txn.vendor_id, "a": txn.amount,
-        "lo": txn.transaction_date - timedelta(hours=24),
-        "hi": txn.transaction_date + timedelta(hours=24),
+        "lo": txn.created_at - timedelta(hours=24),
+        "hi": txn.created_at + timedelta(hours=24),
     }).fetchall()
 
     if len(rows) > 1:
@@ -263,16 +260,16 @@ def detect_split_payment(db, txn) -> Optional[Trigger]:
 
     rows = db.execute(text("""
         SELECT id, amount, invoice_no,
-               to_char(transaction_date AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD')
+               to_char(created_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD')
         FROM transactions
         WHERE vendor_id = :v AND type = 'expense'
           AND amount >= :low AND amount < :high
-          AND transaction_date BETWEEN :lo AND :hi
-        ORDER BY transaction_date
+          AND created_at BETWEEN :lo AND :hi
+        ORDER BY created_at
     """), {
         "v": txn.vendor_id, "low": low, "high": APPROVAL_THRESHOLD,
-        "lo": txn.transaction_date - timedelta(days=SPLIT_WINDOW_DAYS),
-        "hi": txn.transaction_date + timedelta(days=SPLIT_WINDOW_DAYS),
+        "lo": txn.created_at - timedelta(days=SPLIT_WINDOW_DAYS),
+        "hi": txn.created_at + timedelta(days=SPLIT_WINDOW_DAYS),
     }).fetchall()
 
     if len(rows) < SPLIT_MIN_COUNT:

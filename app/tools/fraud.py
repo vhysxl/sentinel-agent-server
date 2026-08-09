@@ -14,23 +14,23 @@ def find_duplicate_expenses(amount: float, vendor_id: int, date: str) -> List[Di
         # 1. `date` datang sebagai waktu WIB naif. Tanpa AT TIME ZONE, Postgres
         #    menafsirkannya memakai timezone sesi (GMT di server ini), sehingga
         #    batas jendela meleset 7 jam.
-        # 2. transaction_date dikembalikan dalam WIB, bukan UTC mentah — kalau
+        # 2. created_at dikembalikan dalam WIB, bukan UTC mentah — kalau
         #    tidak, LLM akan menarasikan jam yang salah.
         sql = text("""
             WITH anchor AS (
                 SELECT CAST(:date AS TIMESTAMP) AT TIME ZONE 'Asia/Jakarta' AS ts
             )
             SELECT t.id, t.amount,
-                   to_char(t.transaction_date AT TIME ZONE 'Asia/Jakarta',
+                   to_char(t.created_at AT TIME ZONE 'Asia/Jakarta',
                            'YYYY-MM-DD HH24:MI:SS') AS date_wib,
                    t.description, t.invoice_no
             FROM transactions t, anchor a
             WHERE t.vendor_id = :vendor_id
               AND t.amount = :amount
               AND t.type = 'expense'
-              AND t.transaction_date BETWEEN a.ts - INTERVAL '24 hours'
+              AND t.created_at BETWEEN a.ts - INTERVAL '24 hours'
                                          AND a.ts + INTERVAL '24 hours'
-            ORDER BY t.transaction_date ASC
+            ORDER BY t.created_at ASC
         """)
         rows = db.execute(sql, {"vendor_id": vendor_id, "amount": amount, "date": date}).fetchall()
 

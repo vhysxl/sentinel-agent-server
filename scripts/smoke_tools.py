@@ -51,9 +51,9 @@ def load_context():
         dup_id = cases["B"]["transaction_ids"][0]
         row = db.execute(text("""
             SELECT amount, vendor_id,
-                   to_char(transaction_date AT TIME ZONE 'Asia/Jakarta',
+                   to_char(created_at AT TIME ZONE 'Asia/Jakarta',
                            'YYYY-MM-DD HH24:MI:SS'),
-                   to_char(transaction_date AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM')
+                   to_char(created_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM')
             FROM transactions WHERE id = :i
         """), {"i": dup_id}).fetchone()
         user_id = db.execute(text(

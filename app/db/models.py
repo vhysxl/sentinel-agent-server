@@ -41,16 +41,22 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, index=True)
-    # Kapan transaksi TERJADI menurut pengguna. Dipakai untuk baseline statistik,
-    # jendela duplikat 24 jam, jendela split payment 7 hari, dan pengelompokan
-    # bulan. Diketik dari form, jadi TIDAK dipakai untuk menilai jam kerja.
+    # WARISAN. Kolom ini dimiliki aplikasi Next.js dan NOT NULL, jadi tidak bisa
+    # dihapus dari sini. Agent server TIDAK PERNAH membacanya. Seed mengisinya
+    # sama dengan created_at semata-mata agar constraint terpenuhi.
+    transaction_date = Column(DateTime(timezone=True), nullable=False)
+    # SATU-SATUNYA waktu yang dipakai sistem ini.
+    #
+    # Transaksi masuk dari API bank: saat bank mencatatnya ITULAH saat transaksi
+    # terjadi. Tidak ada tanggal terpisah yang diketik pengguna, jadi tidak ada
+    # dua makna waktu yang perlu didamaikan dan tidak ada yang bisa dipalsukan
+    # dengan mengetik.
+    #
+    # Dipakai untuk SEGALANYA: aturan jam kerja, jendela duplikat 24 jam,
+    # jendela split payment 7 hari, pengelompokan bulan, dan penyaringan rentang.
     #
     # timestamptz. Konvensi baca: SELALU konversi ke WIB sebelum menilai jam,
     # karena server database ber-timezone GMT. Lihat app.core.config.WIB.
-    transaction_date = Column(DateTime(timezone=True), nullable=False)
-    # Kapan baris ini DICATAT. Ditulis server (DEFAULT now()), tidak pernah
-    # dikirim form. Inilah satu-satunya sumber untuk aturan jam kerja: ia
-    # menjawab "kapan orang ini mengetik", yang tidak bisa dipalsukan.
     created_at = Column(DateTime(timezone=True), nullable=False,
                         server_default=func.now())
     amount = Column(Numeric(15, 2), nullable=False)
