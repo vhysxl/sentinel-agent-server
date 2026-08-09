@@ -22,7 +22,6 @@ from app.agents.llm import run_agent
 from app.tools.financial import (
     compare_category_baseline,
     get_monthly_expense_trend,
-    get_sales_trend,
     get_vendor_transaction_history,
 )
 
@@ -30,7 +29,6 @@ EVIDENCE_TOOLS = [
     get_vendor_transaction_history,
     compare_category_baseline,
     get_monthly_expense_trend,
-    get_sales_trend,
 ]
 
 
@@ -39,6 +37,10 @@ def run_financial_investigator(transaction_id: int, facts: dict | None = None):
     transaction = facts.get("transaction", {})
     triggers = facts.get("triggers", [])
     month = str(transaction.get("transaction_date", ""))[:7]
+
+    revenue = facts.get("revenue_context") or {}
+    revenue_block = (json.dumps(revenue, indent=2, ensure_ascii=False, default=str)
+                     if revenue else "(data revenue tidak tersedia untuk bulan ini)")
 
     findings_block = json.dumps(triggers, indent=2, ensure_ascii=False, default=str) \
         if triggers else "(tidak ada trigger finansial pada kandidat ini)"
@@ -50,6 +52,11 @@ KANDIDAT yang harus kamu periksa (ID {transaction_id}):
 {json.dumps(transaction, indent=2, ensure_ascii=False, default=str)}
 Bulan transaksi: {month}
 
+KONTEKS REVENUE bulan {month} — DIHITUNG PYTHON, bukan olehmu:
+{revenue_block}
+Angka ini FINAL. Jangan menghitung ulang, jangan menyebut angka revenue lain.
+Kalau kamu menyebut angka revenue yang berbeda dari di atas, itu salah.
+
 FAKTA OBJEKTIF yang SUDAH dihitung mesin statistik Python.
 Angka ini final dan sudah menjadi dasar skor:
 {findings_block}
@@ -60,8 +67,8 @@ lolos. Konsekuensinya sebagian kandidat memang wajar. TUGASMU MENYEMPITKAN.
 LANGKAH:
 1. Pahami angka objektif di atas.
 2. Cari bukti dengan tool. Jangan menyimpulkan sebelum memanggil tool:
-   - `get_sales_trend("{month}")` — apakah revenue bulan itu naik? Lonjakan biaya
-     yang sebanding dengan pertumbuhan revenue adalah pengeluaran wajar, bukan anomali.
+   Konteks revenue SUDAH diberikan di atas — jangan mencarinya lagi. Lonjakan
+   biaya yang sebanding dengan pertumbuhan revenue adalah pengeluaran wajar.
    - `get_monthly_expense_trend` — apakah biaya memang sedang naik menyeluruh,
      atau transaksi ini menyendiri?
    - `compare_category_baseline` — bagaimana dibanding kategori sejenis?

@@ -18,7 +18,6 @@ import json
 from app.agents.llm import run_agent
 from app.tools.financial import (
     get_monthly_expense_trend,
-    get_sales_trend,
     get_user_spending_pattern,
     get_vendor_transaction_history,
 )
@@ -27,7 +26,6 @@ EVIDENCE_TOOLS = [
     get_vendor_transaction_history,
     get_user_spending_pattern,
     get_monthly_expense_trend,
-    get_sales_trend,
 ]
 
 
@@ -36,6 +34,10 @@ def run_fraud_investigator(transaction_id: int, facts: dict | None = None):
     transaction = facts.get("transaction", {})
     triggers = facts.get("triggers", [])
     month = str(transaction.get("transaction_date", ""))[:7]
+
+    revenue = facts.get("revenue_context") or {}
+    revenue_block = (json.dumps(revenue, indent=2, ensure_ascii=False, default=str)
+                     if revenue else "(data revenue tidak tersedia untuk bulan ini)")
 
     findings_block = json.dumps(triggers, indent=2, ensure_ascii=False, default=str) \
         if triggers else "(tidak ada pola fraud terdeteksi pada kandidat ini)"
@@ -46,6 +48,11 @@ Kamu adalah Agent 2: Detektif Pola Fraud.
 KANDIDAT yang harus kamu periksa (ID {transaction_id}):
 {json.dumps(transaction, indent=2, ensure_ascii=False, default=str)}
 Bulan transaksi: {month}
+
+KONTEKS REVENUE bulan {month} — DIHITUNG PYTHON, bukan olehmu:
+{revenue_block}
+Angka ini FINAL. Jangan menghitung ulang, jangan menyebut angka revenue lain.
+Kalau kamu menyebut angka revenue yang berbeda dari di atas, itu salah.
 
 POLA YANG SUDAH DIPASTIKAN detektor Python. Ini hasil query, bukan dugaan:
 {findings_block}
@@ -65,8 +72,8 @@ LANGKAH:
    - `get_user_spending_pattern` — apakah penginput ini biasa bertransaksi
      sebesar ini, atau menyimpang dari kebiasaannya sendiri?
    - `get_vendor_transaction_history` — vendor ini punya rekam jejak, atau baru muncul?
-   - `get_sales_trend("{month}")` / `get_monthly_expense_trend` — adakah konteks
-     bisnis yang menjelaskan lonjakan aktivitas ke vendor ini?
+   - `get_monthly_expense_trend` — adakah konteks biaya yang menjelaskan
+     lonjakan aktivitas ke vendor ini? (konteks revenue sudah diberikan di atas)
 3. Putuskan `verdict`:
    - "explainable" — ada penjelasan sah yang DIDUKUNG ANGKA. Contoh sah:
      kontrak bertahap yang memang dijadwalkan, atau pembayaran berulang rutin.

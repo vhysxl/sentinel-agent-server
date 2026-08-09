@@ -42,9 +42,26 @@ TRANSIENT_MARKERS = ("503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED",
                      "DEADLINE_EXCEEDED", "INTERNAL")
 
 
-def pinned_model() -> str:
+def pinned_model(agent: str | None = None) -> str:
+    """
+    Model untuk sebuah agen.
+
+    `GEMINI_MODEL` berlaku untuk semua; `GEMINI_MODEL_AGENT3` menimpanya khusus
+    untuk verifikator.
+
+    Dipisah karena bebannya memang berbeda, dan itu terukur. Dengan
+    gemini-3.1-flash-lite sebagai verifikator, transaksi yang PERSIS SAMA
+    menghasilkan tiga putusan berbeda dalam tiga kali jalan:
+        -15 (Low Risk), +15 (High Risk), -10 (Medium Risk)
+    Skor objektifnya stabil di 50 pada ketiganya — yang bergoyang hanya
+    penilaian LLM. Agent 1 dan 2 hanya menarasikan dan menyelidiki, jadi model
+    ringan memadai; Agent 3 memutuskan angka, dan itu butuh model yang lebih kuat.
+    """
     load_dotenv(override=True)
-    return os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+    base = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+    if agent == "agent3":
+        return os.environ.get("GEMINI_MODEL_AGENT3", base)
+    return base
 
 
 def _is_transient(error: Exception) -> bool:
@@ -75,17 +92,19 @@ class AgentResponse:
         self.attempts = attempts
 
 
-def run_agent(*, label: str, prompt: str, tools: list,
+def run_agent(*, label: str, prompt: str, tools: list, agent: str | None = None,
               temperature: float = 0.2, max_output_tokens: int = 4096) -> AgentResponse:
     """
     Menjalankan satu agen sampai selesai.
 
     `tools` boleh kosong — artinya agen hanya menarasikan fakta yang sudah
     diberikan di dalam prompt, tanpa bisa menjelajah.
+
+    `agent` menentukan model mana yang dipakai (lihat pinned_model).
     """
     load_dotenv(override=True)
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-    model = pinned_model()
+    model = pinned_model(agent)
 
     config = types.GenerateContentConfig(
         tools=tools or None,

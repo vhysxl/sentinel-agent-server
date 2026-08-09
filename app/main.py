@@ -13,7 +13,7 @@ from app.agents.llm import pinned_model
 from app.engine import detectors
 from app.engine.detectors import AGENT_1, AGENT_2
 from app.engine.scoring import calculate_base_score, finalize
-from app.tools.financial import get_transaction_details
+from app.tools.financial import get_sales_trend, get_transaction_details
 
 import json
 import concurrent.futures
@@ -139,9 +139,23 @@ def build_facts(db, transaction_id: int, triggers: list, owner: str) -> dict:
     Agen hanya menerima trigger MILIKNYA (D3). Agent 1 tidak melihat trigger
     fraud dan sebaliknya, supaya tidak ada agen yang menarasikan fakta milik
     domain lain lalu tampak berselisih dengan rekannya di layar.
+
+    `revenue_context` dihitung Python dan disisipkan langsung ke prompt.
+    Alasannya konkret: saat tool ini masih harus dipanggil sendiri oleh agen,
+    Agent 1 dan Agent 3 sama-sama melaporkan "revenue turun 12%" untuk bulan
+    yang sebenarnya NAIK 43,39% — keduanya mencantumkan get_sales_trend di
+    tools_used, lalu menyebut angka yang tidak pernah dikembalikan tool itu.
+    Agent 3 kemudian menolak Agent 2 yang benar dan membalik hasilnya.
+
+    Angka deterministik tidak boleh melewati pembacaan LLM. Kalau Python bisa
+    menghitungnya, Python yang menaruhnya.
     """
+    transaction = get_transaction_details(transaction_id)
+    month = str(transaction.get("transaction_date", ""))[:7]
+
     return {
-        "transaction": get_transaction_details(transaction_id),
+        "transaction": transaction,
+        "revenue_context": get_sales_trend(month) if month else None,
         "triggers": [
             {"code": t.code, "points": t.points,
              "narrative": t.narrative, "detail": t.detail}
@@ -300,6 +314,7 @@ async def run_analysis(request: AnalyzeRequest):
                             "tools_used": tools_used,
                             "scored_by": "python_scoring_engine",
                             "llm_model": pinned_model(),
+                            "llm_model_verifier": pinned_model("agent3"),
                         },
                         "evidence": {
                             # Bukti objektif berasal dari detektor Python, bukan

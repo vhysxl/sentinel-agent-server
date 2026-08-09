@@ -24,14 +24,12 @@ from app.agents.llm import run_agent
 from app.tools.financial import (
     compare_category_baseline,
     get_monthly_expense_trend,
-    get_sales_trend,
     get_user_spending_pattern,
     get_vendor_transaction_history,
 )
 
 # Gabungan tool kedua detektif: apa pun yang mereka klaim, Agent 3 bisa cek ulang.
 VERIFICATION_TOOLS = [
-    get_sales_trend,
     compare_category_baseline,
     get_monthly_expense_trend,
     get_vendor_transaction_history,
@@ -58,6 +56,10 @@ def run_evidence_reviewer(transaction_id: int, agent1_findings: dict,
     transaction = facts.get("transaction", {})
     month = str(transaction.get("transaction_date", ""))[:7]
 
+    revenue = facts.get("revenue_context") or {}
+    revenue_block = (json.dumps(revenue, indent=2, ensure_ascii=False, default=str)
+                     if revenue else "(data revenue tidak tersedia untuk bulan ini)")
+
     triggers = [
         {"code": t["code"], "points": t["points"], "narrative": t["narrative"]}
         for t in base_scoring.get("objective_triggers", [])
@@ -69,6 +71,11 @@ Kamu adalah Agent 3: Verifikator sekaligus penulis laporan akhir.
 TRANSAKSI (ID {transaction_id}):
 {json.dumps(transaction, indent=2, ensure_ascii=False, default=str)}
 Bulan transaksi: {month}
+
+KONTEKS REVENUE bulan {month} — DIHITUNG PYTHON, bukan olehmu:
+{revenue_block}
+Angka ini FINAL. Jangan menghitung ulang, jangan menyebut angka revenue lain.
+Kalau kamu menyebut angka revenue yang berbeda dari di atas, itu salah.
 
 SKOR OBJEKTIF dari mesin (base = {base_scoring.get('base_risk_score')}):
 {json.dumps(triggers, indent=2, ensure_ascii=False, default=str)}
@@ -83,16 +90,17 @@ TUGASMU: memverifikasi kedua putusan itu, lalu menulis laporan akhir.
 
 LANGKAH:
 1. Untuk setiap detektif, periksa apakah putusannya DIDUKUNG bukti:
-   - Kalau ia bilang "explainable", panggil tool yang sama untuk memastikan angka
-     yang ia sebut memang benar. Detektif bisa keliru membaca atau mengarang.
+   - Kalau ia menyebut angka REVENUE, bandingkan dengan KONTEKS REVENUE di atas.
+     Detektif yang menyebut angka revenue berbeda dari itu SALAH — tolak
+     putusannya, seberapa pun yakin ia terdengar.
+   - Untuk klaim lain, panggil tool yang sama untuk memastikan.
    - Kalau ia menyebut sesuatu yang TIDAK ada dalam daftar trigger objektif,
      perlakukan sebagai klaim tak berdasar dan tolak.
    - Kalau ia GAGAL dijalankan, jangan mengarang isinya. Verifikasi dari fakta
      objektif saja.
 2. Putuskan `llm_semantic_adjustment` antara -20 dan +20:
    - NEGATIF hanya bila pembenaran bisnisnya TERVERIFIKASI oleh tool-mu sendiri.
-     WAJIB menyebut angka konkret (mis. "revenue naik 43.39%"). Tanpa angka
-     terverifikasi, jangan beri nilai negatif.
+     WAJIB menyebut angka konkret yang SAMA dengan konteks di atas.
    - POSITIF bila konteks justru memberatkan, misalnya klaim pada deskripsi
      transaksi terbantahkan data.
    - NOL bila tidak ada informasi baru. Nol sering merupakan jawaban yang benar.
@@ -121,7 +129,7 @@ Balas HANYA JSON valid tanpa markdown:
   }},
   "evidence": {{
       "semantic": [
-          {{"source": "get_sales_trend", "insight": "hasil verifikasi berikut angkanya"}}
+          {{"source": "revenue_context", "insight": "hasil verifikasi berikut angkanya"}}
       ]
   }},
   "scoring": {{
@@ -131,6 +139,10 @@ Balas HANYA JSON valid tanpa markdown:
 }}
 """
 
-    response = run_agent(label="Agent 3", prompt=prompt, tools=VERIFICATION_TOOLS)
+    # temperature=0: verifikator memutuskan angka, bukan menulis prosa. Pada 0.2
+    # transaksi yang sama pernah menghasilkan -15, +15, dan -10 di tiga kali
+    # jalan berturut-turut. Keputusan audit tidak boleh berubah karena undian.
+    response = run_agent(label="Agent 3", prompt=prompt, tools=VERIFICATION_TOOLS,
+                         agent="agent3", temperature=0.0)
     print(f"\n[Agent 3] Selesai (model {response.model}).")
     return response
