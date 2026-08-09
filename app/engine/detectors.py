@@ -348,6 +348,74 @@ def detect_role_bypass(db, txn, has_split: bool) -> Optional[Trigger]:
     )
 
 
+def detect_vendor_backdated(db, txn) -> Optional[Trigger]:
+    """
+    Uang keluar ke vendor SEBELUM vendor itu terdaftar.
+
+    Pola vendor fiktif yang klasik: pembayaran terjadi lebih dulu, lalu catatan
+    vendornya dibuat belakangan supaya pembayaran itu punya penerima yang
+    terlihat sah.
+
+    AMPLIFIER, bukan pemicu kandidat — dan alasannya konkret. Setiap migrasi
+    data membuat SELURUH vendor punya pola ini sekaligus, karena baris vendor
+    dibuat saat impor sementara transaksinya bertanggal mundur. Kalau ini bisa
+    menciptakan temuan sendirian, satu kali impor akan membanjiri antrean dengan
+    temuan yang semuanya palsu.
+
+    Sebagai penguat ia tetap berguna: pada temuan yang memang sudah bermasalah,
+    fakta bahwa vendornya didaftarkan belakangan menambah bobot nyata.
+
+    Kolom ini dulu ditampilkan ke agen tanpa aturan apa pun di belakangnya.
+    Akibatnya Agent 2 menafsirkannya sendiri dan menyebutnya "sangat
+    mencurigakan" — kebetulan benar, tapi tanpa skor dan tanpa jejak. Sekarang
+    Python yang memutuskan.
+    """
+    if not txn.vendor_id:
+        return None
+
+    # Perbandingan dilakukan sebagai TANGGAL WIB di sisi SQL.
+    #
+    # `vendors.join_date` bertipe timestamp NAIF sedangkan `transactions.created_at`
+    # timestamptz. Membandingkan keduanya langsung membuat Postgres menafsirkan
+    # yang naif memakai timezone sesi — GMT di server ini — sehingga batas harinya
+    # meleset 7 jam. Dan `AT TIME ZONE` bekerja ke arah BERLAWANAN pada keduanya:
+    # pada kolom naif ia menambahkan zona, pada kolom sadar-zona ia melepasnya.
+    row = db.execute(text("""
+        SELECT v.vendor_name,
+               v.join_date::date,
+               (t.created_at AT TIME ZONE 'Asia/Jakarta')::date,
+               v.join_date::date - (t.created_at AT TIME ZONE 'Asia/Jakarta')::date
+        FROM vendors v, transactions t
+        WHERE v.id = :v AND t.id = :i AND v.join_date IS NOT NULL
+          AND (t.created_at AT TIME ZONE 'Asia/Jakarta')::date < v.join_date::date
+    """), {"v": txn.vendor_id, "i": txn.id}).fetchone()
+    if not row:
+        return None
+
+    name, joined, paid, gap = row
+
+    return Trigger(
+        code="vendor_registered_after_payment", points=20, owner=AGENT_2,
+        amplifier_only=True,
+        narrative=(
+            f"Pembayaran ke {name} tercatat {gap} hari SEBELUM vendor ini "
+            f"terdaftar di data master. Uang keluar lebih dulu, catatan "
+            f"vendornya menyusul."
+        ),
+        detail={
+            "rule": "payment_precedes_vendor_registration",
+            "vendor_id": txn.vendor_id,
+            "vendor_name": name,
+            "vendor_joined_wib": joined.strftime("%Y-%m-%d"),
+            "payment_recorded_wib": paid.strftime("%Y-%m-%d"),
+            "gap_days": gap,
+            "note": ("migrasi data dapat menghasilkan pola ini pada seluruh "
+                     "vendor sekaligus; karena itu tidak pernah menjadi pemicu "
+                     "sendirian"),
+        },
+    )
+
+
 def detect_vendor_risk(db, txn) -> Optional[Trigger]:
     """
     Vendor berstatus berisiko, atau vendor yang riwayatnya masih terlalu tipis.
@@ -401,8 +469,8 @@ def run_all(db, txn) -> list[Trigger]:
     """Menjalankan seluruh detektor atas satu transaksi."""
     triggers: list[Trigger] = []
 
-    for detector in (detect_amount_anomaly, detect_timing,
-                     detect_duplicate, detect_vendor_risk):
+    for detector in (detect_amount_anomaly, detect_timing, detect_duplicate,
+                     detect_vendor_risk, detect_vendor_backdated):
         found = detector(db, txn)
         if found:
             triggers.append(found)
