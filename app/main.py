@@ -18,7 +18,7 @@ from datetime import datetime
 
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, text
 
@@ -69,6 +69,16 @@ app.add_middleware(
 class AnalyzeRequest(BaseModel):
     start_date: str
     end_date: str
+    # Memeriksa ulang transaksi yang sudah pernah diperiksa dan bersih. Dipakai
+    # saat aturan deteksi diubah; di luar itu biarkan False supaya klik berulang
+    # tidak membayar LLM untuk pekerjaan yang sama.
+    force: bool = False
+
+
+# Kunci advisory Postgres untuk backfill. Angkanya sembarang, yang penting sama
+# di setiap proses. Advisory lock dipilih karena Postgres melepaskannya sendiri
+# saat koneksi mati — jadi proses yang crash tidak meninggalkan kunci abadi.
+BACKFILL_LOCK_KEY = 728301
 
 
 class AskRequest(BaseModel):
@@ -571,20 +581,50 @@ async def run_backfill(request: AnalyzeRequest):
     """
     Memeriksa seluruh transaksi dalam rentang, satu per satu, dengan progres SSE.
 
-    Dipertahankan untuk seed dan demo. Ia memanggil `analyze_transaction` yang
-    sama persis dengan jalur otomatis — supaya kedua jalur tidak pernah bisa
-    memberi hasil berbeda.
+    Ia memanggil `analyze_transaction` yang sama persis dengan jalur lain —
+    supaya tidak ada dua jalur yang bisa memberi hasil berbeda.
+
+    DAPAT DILANJUTKAN. Transaksi yang sudah diperiksa dan berstatus clean atau
+    flagged dilewati, jadi koneksi yang putus di tengah bukan kegagalan: klik
+    berikutnya meneruskan dari sisa, bukan mengulang dari awal. Ini yang membuat
+    batas durasi fungsi bisa ditoleransi.
+
+    `failed` SENGAJA tidak dilewati. Kegagalan biasanya sementara — kuota habis,
+    balasan model tidak terurai — dan kalau ikut dilewati satu kegagalan jadi
+    permanen tanpa ada yang memperbaikinya.
     """
+    db = SessionLocal()
+
+    # Dikunci sebelum stream dibuka, supaya penolakan bisa berupa 409 biasa dan
+    # bukan stream yang isinya cuma pesan error.
+    #
+    # Tanpa ini dua klik bersamaan sama-sama melihat "belum ada finding" untuk
+    # transaksi yang sama lalu sama-sama insert; `findings.transaction_id` itu
+    # unique, jadi yang kalah tercatat `failed` padahal tidak ada yang salah.
+    acquired = db.execute(
+        text("SELECT pg_try_advisory_lock(:k)"), {"k": BACKFILL_LOCK_KEY}
+    ).scalar()
+
+    if not acquired:
+        db.close()
+        return JSONResponse(
+            status_code=409,
+            content={"error": "Pemeriksaan lain sedang berjalan. Tunggu sampai selesai."},
+        )
+
     def event_stream():
-        db = SessionLocal()
         try:
             ids = [r[0] for r in db.execute(text("""
-                SELECT id FROM transactions
-                WHERE type = 'expense'
-                  AND (created_at AT TIME ZONE 'Asia/Jakarta')::date
+                SELECT t.id
+                FROM transactions t
+                LEFT JOIN transaction_analysis ta ON ta.transaction_id = t.id
+                WHERE t.type = 'expense'
+                  AND (t.created_at AT TIME ZONE 'Asia/Jakarta')::date
                       BETWEEN CAST(:start AS DATE) AND CAST(:end AS DATE)
-                ORDER BY created_at, id
-            """), {"start": request.start_date, "end": request.end_date})]
+                  AND (:force OR ta.transaction_id IS NULL OR ta.status = :failed)
+                ORDER BY t.created_at, t.id
+            """), {"start": request.start_date, "end": request.end_date,
+                   "force": request.force, "failed": STATUS_FAILED})]
 
             yield sse_event({"status": "info",
                              "message": f"{len(ids)} transaksi akan diperiksa."})
