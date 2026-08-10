@@ -7,12 +7,20 @@ endpoint mengembalikan text/event-stream, sehingga selalu gagal mengurai.
 Pakai:  python scripts/run_analysis.py [start_date] [end_date]
 """
 import json
+import os
 import sys
 import time
 
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 URL = "http://127.0.0.1:8000/api/analyze"
+
+# Skrip ini memanggil lewat HTTP, jadi ia tunduk pada handshake yang sama seperti
+# Express. Tanpa kunci, jawabannya 401 dan bukan kegagalan analisis.
+HEADERS = {"X-Internal-Key": os.getenv("INTERNAL_API_KEY", "")}
 
 
 def main():
@@ -24,8 +32,12 @@ def main():
     findings = []
 
     with requests.post(URL, json={"start_date": start, "end_date": end},
-                       stream=True, timeout=900) as resp:
+                       headers=HEADERS, stream=True, timeout=900) as resp:
         print(f"HTTP {resp.status_code}\n")
+        if resp.status_code == 401:
+            print("Ditolak. Pasang INTERNAL_API_KEY di .env dengan nilai yang sama "
+                  "seperti yang dipakai agent server.")
+            sys.exit(1)
         for raw in resp.iter_lines(decode_unicode=True):
             if not raw or not raw.startswith("data: "):
                 continue

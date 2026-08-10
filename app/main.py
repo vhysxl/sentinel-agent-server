@@ -28,6 +28,7 @@ from app.agents.agent3 import run_evidence_reviewer
 from app.agents.ask import ask_sentinel
 from app.agents.llm import pinned_model
 from app.core.config import WIB
+from app.core.security import require_internal_key
 from app.core.constants import (
     RESOLUTIONS,
     RISK_ACTION,
@@ -50,6 +51,12 @@ app = FastAPI(
     version="3.0.0",
 )
 
+# Didaftarkan SEBELUM CORS supaya CORS berada di lapisan luar: preflight OPTIONS
+# dijawab CORSMiddleware dan tidak pernah sampai ke pemeriksaan kunci.
+app.middleware("http")(require_internal_key)
+
+# allow_origins tetap "*" karena tidak ada browser yang boleh memanggil layanan
+# ini sama sekali — yang menghalanginya sekarang kunci di atas, bukan CORS.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

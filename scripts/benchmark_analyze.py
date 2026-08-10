@@ -1,14 +1,22 @@
+import os
 import requests
 import time
 import json
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 url = "http://127.0.0.1:8000/api/analyze"
 payload = {
     "start_date": "2020-01-01",
     "end_date": "2026-12-31"
 }
+# Memanggil lewat HTTP berarti tunduk pada handshake antar-service; tanpa kunci
+# jawabannya 401.
 headers = {
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
+    "X-Internal-Key": os.getenv("INTERNAL_API_KEY", "")
 }
 
 print("Memulai proses benchmark untuk endpoint /api/analyze...")
