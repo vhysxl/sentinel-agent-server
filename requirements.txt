@@ -10,3 +10,4 @@ faker
 python-dotenv
 google-genai
 openai
+tzdata
