@@ -364,3 +364,76 @@ class TestGroupIdentification:
         dup = trigger("duplicate_confirmed", 50,
                       detail={"transaction_ids": [706, 707]})
         assert group_ids_of(706, [timing, dup]) == [706, 707]
+
+
+# ---------------------------------------------------------------------------
+# Event progres: apa yang dilihat layar selama pemeriksaan berjalan
+# ---------------------------------------------------------------------------
+
+class TestProgressEvent:
+    """
+    `_progress_event` menerjemahkan hasil satu transaksi menjadi satu event SSE.
+
+    Diuji di sini karena murni — tidak menyentuh database maupun LLM — dan
+    karena angka progres yang salah adalah kebohongan kecil yang sulit terlihat.
+    """
+
+    def test_clean_transaction_still_reports(self):
+        """
+        Yang bersih pun harus terbit.
+
+        Dulu cabang ini diam, dan karena ~90% transaksi berhenti di Python,
+        penghitung di layar membeku lama lalu melompat. Progres yang ditampilkan
+        bukan progres yang sebenarnya.
+        """
+        from app.main import _progress_event
+        event = _progress_event(3, 68, 1664, {"status": "clean", "triggers": 1})
+        assert event["phase"] == "clean"
+        assert (event["index"], event["total"]) == (3, 68)
+        assert event["transaction_id"] == 1664
+        assert event["finding_id"] is None
+
+    def test_created_carries_the_risk_numbers(self):
+        from app.main import _progress_event
+        event = _progress_event(1, 7, 706, {
+            "status": "created", "finding_id": 3,
+            "risk_level": "critical", "risk_score": 80,
+        })
+        assert event["phase"] == "created"
+        assert event["finding_id"] == 3
+        assert (event["risk_level"], event["risk_score"]) == ("critical", 80)
+
+    def test_updated_has_no_score_of_its_own(self):
+        """Bergabung ke temuan lama tidak memanggil LLM dan tidak menilai ulang."""
+        from app.main import _progress_event
+        event = _progress_event(2, 7, 707, {"status": "updated", "finding_id": 3,
+                                            "covered": [706, 707]})
+        assert event["phase"] == "updated"
+        assert event["finding_id"] == 3
+        assert event["risk_score"] is None
+
+    def test_failed_is_distinguishable_from_clean(self):
+        """
+        Gagal diperiksa bukan bersih. Kalau keduanya tampil sama, satu kegagalan
+        diam-diam terhitung sebagai transaksi yang aman.
+        """
+        from app.main import _progress_event
+        event = _progress_event(5, 7, 712, {"status": "failed", "error": "kuota habis"})
+        assert event["phase"] == "failed"
+        assert event["node"] == "error"
+
+    @pytest.mark.parametrize("result", [
+        {"status": "created", "finding_id": 3, "risk_level": "high", "risk_score": 60},
+        {"status": "updated", "finding_id": 3},
+        {"status": "failed", "error": "x"},
+        {"status": "clean"},
+    ])
+    def test_every_phase_keeps_the_legacy_fields(self, result):
+        """
+        `scripts/run_analysis.py` hanya membaca `status` dan `message`. Field
+        terstruktur ditambahkan di sebelahnya, bukan menggantikannya.
+        """
+        from app.main import _progress_event
+        event = _progress_event(4, 9, 700, result)
+        assert event["status"] == "progress"
+        assert event["message"].startswith("[4/9]")

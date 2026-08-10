@@ -112,6 +112,62 @@ def sse_event(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
 
 
+# Nasib satu transaksi setelah diperiksa. Dipisah dari `message` supaya UI bisa
+# memilih ikon dan warna tanpa mengurai kalimat berbahasa Indonesia.
+PHASE_CREATED = "created"
+PHASE_UPDATED = "updated"
+PHASE_CLEAN = "clean"
+PHASE_FAILED = "failed"
+
+
+def _progress_event(index: int, total: int, transaction_id: int, result: dict) -> dict:
+    """
+    Merakit satu event progres dari hasil `analyze_transaction`.
+
+    Murni — tidak menyentuh database maupun LLM — supaya bisa diuji langsung,
+    sama seperti scoring engine.
+
+    `message` dipertahankan apa adanya untuk pembaca lama: `scripts/run_analysis.py`
+    hanya membaca `status` dan `message`. Field terstruktur di sebelahnya yang
+    dipakai UI, jadi progres tidak perlu ditebak ulang dari kalimatnya.
+    """
+    st = result.get("status")
+    prefix = f"[{index}/{total}]"
+    base = {
+        "status": "progress",
+        "index": index,
+        "total": total,
+        "transaction_id": transaction_id,
+        "finding_id": None,
+        "risk_level": None,
+        "risk_score": None,
+    }
+
+    if st == "created":
+        return {**base, "node": "finding", "phase": PHASE_CREATED,
+                "finding_id": result.get("finding_id"),
+                "risk_level": result.get("risk_level"),
+                "risk_score": result.get("risk_score"),
+                "message": (f"{prefix} Temuan baru untuk transaksi {transaction_id} "
+                            f"— {result.get('risk_level')} ({result.get('risk_score')})")}
+
+    if st == "updated":
+        return {**base, "node": "finding", "phase": PHASE_UPDATED,
+                "finding_id": result.get("finding_id"),
+                "message": (f"{prefix} Transaksi {transaction_id} bergabung ke temuan "
+                            f"#{result.get('finding_id')} — tanpa LLM")}
+
+    if st == STATUS_FAILED:
+        return {**base, "node": "error", "phase": PHASE_FAILED,
+                "message": f"{prefix} Transaksi {transaction_id} GAGAL"}
+
+    # Bersih. Dulu tidak menerbitkan apa pun, dan itulah sebabnya ~90% iterasi
+    # tidak terlihat: penghitung di layar diam berlama-lama lalu melompat. Yang
+    # ditampilkan bukan progres yang sebenarnya. Sekarang ikut terbit.
+    return {**base, "node": "clean", "phase": PHASE_CLEAN,
+            "message": f"{prefix} Transaksi {transaction_id} bersih"}
+
+
 def _safe_agent(future) -> dict:
     """Kegagalan satu agen tidak boleh mematikan pipeline."""
     try:
@@ -520,6 +576,13 @@ def summary():
             Transaction.type == "expense").scalar() or 0
         analyzed = sum(counts.values())
 
+        # Temuan yang sudah ditutup. Sebelumnya tidak dihitung sama sekali, jadi
+        # "berapa yang sudah dibereskan" — pertanyaan pertama seorang lead —
+        # tidak punya jawaban di halaman mana pun.
+        selesai = db.query(func.count(Finding.id)).filter(
+            Finding.resolution.isnot(None)).scalar() or 0
+        total_temuan = sum(open_by_level.values()) + selesai
+
         return {
             "perlu_tindakan": open_by_level.get("critical", 0),
             "perlu_ditinjau": open_by_level.get("high", 0) + open_by_level.get("medium", 0),
@@ -528,6 +591,12 @@ def summary():
             "belum_diperiksa": max(total_tx - analyzed, 0),
             "total_transaksi": total_tx,
             "per_tingkat": open_by_level,
+            "selesai": selesai,
+            "total_temuan": total_temuan,
+            # None, bukan 0: belum ada temuan sama sekali bukan berarti nol
+            # persen dibereskan. UI menampilkan "—" untuk kasus itu.
+            "clear_rate": (round(selesai * 100 / total_temuan)
+                           if total_temuan else None),
         }
     finally:
         db.close()
@@ -626,40 +695,30 @@ async def run_backfill(request: AnalyzeRequest):
             """), {"start": request.start_date, "end": request.end_date,
                    "force": request.force, "failed": STATUS_FAILED})]
 
+            # `total` disertakan supaya UI tidak perlu mengurai "[3/12]" dari
+            # kalimat untuk tahu panjang antreannya.
             yield sse_event({"status": "info",
-                             "message": f"{len(ids)} transaksi akan diperiksa."})
+                             "message": f"{len(ids)} transaksi akan diperiksa.",
+                             "total": len(ids),
+                             "start_date": request.start_date,
+                             "end_date": request.end_date,
+                             "force": request.force})
 
-            created = updated = clean = failed = 0
+            tally = {PHASE_CREATED: 0, PHASE_UPDATED: 0,
+                     PHASE_CLEAN: 0, PHASE_FAILED: 0}
             for i, tid in enumerate(ids, 1):
-                result = analyze_transaction(db, tid)
-                st = result.get("status")
-                if st == "created":
-                    created += 1
-                    yield sse_event({
-                        "status": "progress", "node": "finding",
-                        "message": (f"[{i}/{len(ids)}] Temuan baru untuk transaksi {tid} "
-                                    f"— {result.get('risk_level')} "
-                                    f"({result.get('risk_score')})"),
-                    })
-                elif st == "updated":
-                    updated += 1
-                    yield sse_event({
-                        "status": "progress", "node": "finding",
-                        "message": (f"[{i}/{len(ids)}] Transaksi {tid} bergabung ke temuan "
-                                    f"#{result.get('finding_id')} — tanpa LLM"),
-                    })
-                elif st == STATUS_FAILED:
-                    failed += 1
-                    yield sse_event({"status": "progress", "node": "error",
-                                     "message": f"[{i}/{len(ids)}] Transaksi {tid} GAGAL"})
-                else:
-                    clean += 1
+                event = _progress_event(i, len(ids), tid,
+                                        analyze_transaction(db, tid))
+                tally[event["phase"]] += 1
+                yield sse_event(event)
 
             yield sse_event({
                 "status": "complete",
-                "summary": {"diperiksa": len(ids), "temuan_baru": created,
-                            "temuan_diperbarui": updated, "bersih": clean,
-                            "gagal": failed},
+                "summary": {"diperiksa": len(ids),
+                            "temuan_baru": tally[PHASE_CREATED],
+                            "temuan_diperbarui": tally[PHASE_UPDATED],
+                            "bersih": tally[PHASE_CLEAN],
+                            "gagal": tally[PHASE_FAILED]},
                 "findings": [_finding_row(f) for f in
                              db.query(Finding).filter(Finding.resolution.is_(None))
                              .order_by(Finding.risk_score.desc()).all()],
