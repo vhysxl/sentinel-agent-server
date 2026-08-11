@@ -66,6 +66,17 @@ RESOLUTION_LABEL = {
 }
 
 
+# --- Filter status temuan (GET /api/findings) --------------------------------
+# Bukan field di database — filter query belaka. "all" perlu nilai eksplisit
+# karena default FastAPI adalah "open": tanpa "all" tidak ada cara menyebut
+# "jangan filter sama sekali".
+FILTER_OPEN = "open"
+FILTER_RESOLVED = "resolved"
+FILTER_ALL = "all"
+
+FINDING_STATUS_FILTERS = (FILTER_OPEN, FILTER_RESOLVED, FILTER_ALL)
+
+
 # --- Status pemeriksaan per transaksi ---------------------------------------
 # Inilah yang membedakan "sudah diperiksa dan bersih" dari "belum pernah
 # diperiksa". Tanpa pembedaan itu, angka "64 aman" di halaman tidak punya arti.

@@ -27,11 +27,12 @@ from app.agents.agent2 import run_fraud_investigator
 from app.agents.agent3 import run_evidence_reviewer
 from app.agents.ask import ask_sentinel
 from app.agents.llm import pinned_model
+from app.api_models import FindingRow, FindingStatus, FindingSummary, Resolution
 from app.core.config import WIB
 from app.core import locking
 from app.core.security import require_internal_key
 from app.core.constants import (
-    RESOLUTIONS,
+    FILTER_OPEN,
     RISK_ACTION,
     RISK_LABEL,
     RISK_ORDER,
@@ -81,7 +82,7 @@ class AskRequest(BaseModel):
 
 
 class ResolveRequest(BaseModel):
-    resolution: str
+    resolution: Resolution
     note: str | None = None
     resolved_by: int | None = None
 
@@ -486,8 +487,9 @@ def _finding_row(f: Finding, detail: bool = False) -> dict:
     return row
 
 
-@app.get("/api/findings")
-def list_findings(status: str = "open", risk_level: str | None = None,
+@app.get("/api/findings", response_model=list[FindingRow])
+def list_findings(status: FindingStatus = FILTER_OPEN,
+                  risk_level: str | None = None,
                   limit: int = 50):
     """
     Antrean kerja. `status`: open | resolved | all.
@@ -498,7 +500,7 @@ def list_findings(status: str = "open", risk_level: str | None = None,
     db = SessionLocal()
     try:
         q = db.query(Finding)
-        if status == "open":
+        if status == FILTER_OPEN:
             q = q.filter(Finding.resolution.is_(None))
         elif status == "resolved":
             q = q.filter(Finding.resolution.isnot(None))
@@ -533,9 +535,6 @@ def resolve_finding(finding_id: int, request: ResolveRequest):
     berturut-turut sebagai `justified`, itu sinyal ambangnya kekencangan.
     Boolean tidak memberi informasi itu.
     """
-    if request.resolution not in RESOLUTIONS:
-        return {"error": f"resolution harus salah satu dari {list(RESOLUTIONS)}"}
-
     db = SessionLocal()
     try:
         f = db.get(Finding, finding_id)
@@ -552,7 +551,7 @@ def resolve_finding(finding_id: int, request: ResolveRequest):
         db.close()
 
 
-@app.get("/api/summary")
+@app.get("/api/summary", response_model=FindingSummary)
 def summary():
     """
     Baris pertama yang dilihat orang keuangan saat membuka tab.
