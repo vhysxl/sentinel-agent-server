@@ -37,6 +37,7 @@ TOOLS = {
     "get_top_transactions": (analytics.get_top_transactions, ("period",)),
     "compare_periods": (analytics.compare_periods, ("period_a", "period_b")),
     "get_findings_summary": (analytics.get_findings_summary, ("period",)),
+    "list_vendors": (analytics.list_vendors, ("status", "limit")),
     "get_vendor_detail": (analytics.get_vendor_detail, ("vendor", "period")),
     "search_transactions": (analytics.search_transactions, (
         "period", "vendor", "category", "min_amount", "max_amount",
@@ -75,6 +76,14 @@ TOOL YANG ADA:
   get_finding_detail(finding_id |       RINCIAN satu temuan: pemicu beserta
                      transaction_id)    poinnya, susunan skor, kesimpulan agen,
                                         status penyelesaian
+  list_vendors(status)                  DAFTAR vendor terdaftar: status, tanggal
+                                        transaksi terakhir, lama tidak aktif, dan
+                                        jumlah temuan. Untuk "vendor apa saja yang
+                                        kita punya" DAN untuk "mana yang tidak
+                                        aktif / mencurigakan" — BUKAN
+                                        get_top_vendors, yang mengurutkan
+                                        berdasarkan belanja dan membuang vendor
+                                        yang belum pernah bertransaksi
   get_vendor_detail(vendor, period)     profil SATU vendor: status, total belanja,
                                         temuan, transaksi terakhirnya.
                                         `vendor` = potongan nama, `period` opsional
@@ -117,8 +126,37 @@ Contoh lain:
 {{"steps": [{{"tool": "search_transactions",
              "args": {{"vendor": "Sinar Abadi", "urutkan": "terbaru"}}}}]}}
 
-Kalau pertanyaannya tidak bisa dijawab oleh tool mana pun, balas:
-{{"steps": [], "alasan": "penjelasan singkat"}}
+Pertanyaan boleh berbahasa Indonesia ATAU Inggris. Perlakukan sama; pemilihan
+tool tidak bergantung pada bahasa.
+
+TIGA KEMUNGKINAN, PILIH SATU:
+
+1. BUTUH DATA — pertanyaannya tentang keuangan, transaksi, vendor, atau temuan
+   audit perusahaan ini. Pilih tool.
+
+   Termasuk pertanyaan yang meminta PENILAIAN atas data: "vendor mana yang
+   mencurigakan", "mana yang sudah tidak aktif", "apa yang perlu saya periksa
+   minggu ini". Ambil datanya lewat tool; Sentinel yang menilai setelahnya.
+   Jangan menolak hanya karena tidak ada tool bernama "cari yang mencurigakan" —
+   tool yang benar adalah yang membawa bahan penilaiannya.
+
+2. TIDAK BUTUH DATA — tentang Sentinel sendiri ("siapa kamu", "apa yang bisa
+   kamu lakukan"), sapaan, atau pertanyaan umum seputar keuangan, audit, dan
+   statistik yang tidak menyangkut angka perusahaan ini ("apa itu z-score",
+   "kenapa pembayaran dipecah itu masalah").
+   -> steps kosong, alasan "tidak butuh data".
+
+3. DI LUAR CAKUPAN — pemrograman, biologi, resep, puisi, berita, dan apa pun di
+   luar keuangan/audit/statistik.
+   -> steps kosong, alasan "di luar cakupan".
+
+Untuk pilihan 2 dan 3 balas:
+{{"steps": [], "alasan": "tidak butuh data | di luar cakupan — penjelasan singkat"}}
+
+Jangan memanggil tool hanya untuk terlihat berusaha. Tool yang dipanggil pada
+pertanyaan yang tidak menyangkut data perusahaan akan mengembalikan angka yang
+tidak ada hubungannya dengan pertanyaan, dan itu lebih menyesatkan daripada
+menjawab tanpa data.
 """
 
 # Persona disisipkan sebagai ARGUMEN .format(), bukan dirangkai lebih dulu
@@ -150,8 +188,65 @@ CARA MEMBACA DATA DI ATAS:
 - Status "vendor_ambigu" atau "vendor_tidak_ditemukan" bukan kegagalan: sebutkan
   kandidat atau daftar vendor yang ada, lalu minta penanya mempertegas.
 
+BAHASA JAWABAN — periksa ini sebelum menulis:
+Prompt ini dan sebagian isi data berbahasa Indonesia. Itu TIDAK menentukan
+bahasa jawabanmu. Yang menentukan hanya kalimat ini:
+
+    "{question}"
+
+Isi "language" lebih dulu — "en" kalau kalimat itu bahasa Inggris, "id" kalau
+bahasa Indonesia — lalu tulis "answer" dalam bahasa tersebut. Nama vendor,
+kategori, dan status tetap disalin apa adanya, tidak diterjemahkan.
+
 Balas HANYA JSON:
-{{"answer": "jawaban bahasa Indonesia"}}
+{{"language": "id atau en", "answer": "jawabanmu dalam bahasa tersebut"}}
+"""
+
+# Jalur untuk pertanyaan yang memang tidak butuh data: identitas, kemampuan,
+# sapaan, atau hal di luar jangkauan.
+#
+# Sebelumnya cabang ini pulang membawa kalimat mati tanpa memanggil model sama
+# sekali, sehingga persona tidak pernah sampai — "siapa kamu?" dijawab daftar
+# kemampuan yang ditulis di dalam kode, dalam bahasa Indonesia apa pun bahasa
+# penanyanya. Identitas yang tidak bisa memperkenalkan dirinya sendiri bukan
+# identitas.
+META_PROMPT = """
+{persona}
+
+PERTANYAAN: {question}
+
+Pertanyaan ini tidak membutuhkan data transaksi.
+
+Catatan perencana (catatan INTERNAL, selalu ditulis bahasa Indonesia; jangan
+dikutip dan jangan dijadikan acuan bahasa jawabanmu): {alasan}
+
+{capabilities}
+
+ATURAN:
+- TIDAK ADA data yang diambil, jadi jangan menyebut satu pun angka, nominal,
+  nama vendor, atau temuan milik perusahaan ini.
+- Kalau pertanyaannya tentang dirimu atau kemampuanmu, jawab dengan ramah dan
+  ringkas, lalu sebutkan hal yang bisa ditanyakan.
+- Kalau pertanyaannya soal KONSEP keuangan, audit, atau statistik — "apa itu
+  z-score", "kenapa split payment berbahaya" — jawab saja, singkat dan praktis.
+  Itu masih bidangmu; kamu hanya tidak sedang melihat angka perusahaan ini.
+  Tawarkan menerapkannya ke data mereka kalau relevan.
+- Kalau pertanyaannya DI LUAR keuangan, audit, dan statistik — pemrograman,
+  biologi, resep, puisi — tolak dalam satu kalimat tanpa minta maaf berlebihan,
+  lalu sebutkan bidang yang kamu tangani. Jangan mencoba menjawabnya sedikit pun.
+- Jangan mengarang kemampuan yang tidak ada di daftar di atas.
+
+BAHASA JAWABAN — periksa ini sebelum menulis:
+Seluruh prompt ini berbahasa Indonesia, termasuk catatan perencana di atas.
+Itu TIDAK menentukan bahasa jawabanmu. Yang menentukan hanya kalimat ini:
+
+    "{question}"
+
+Isi "language" lebih dulu — "en" kalau kalimat itu bahasa Inggris, "id" kalau
+bahasa Indonesia — lalu tulis "answer" dalam bahasa tersebut.
+
+Balas HANYA JSON:
+{{"language": "id atau en", "answer": "jawabanmu dalam bahasa tersebut"}}
 """
 
 
@@ -376,6 +471,34 @@ def _angka_dalam_payload(results: list) -> set:
     return angka
 
 
+def answer_without_data(question: str, alasan: str | None) -> str:
+    """
+    Menjawab pertanyaan yang tidak butuh tool, tetap dengan suara Sentinel.
+
+    Aman dilakukan justru karena tidak ada data yang diambil: tidak ada angka
+    yang bisa salah dikutip, sehingga satu-satunya yang dipertaruhkan adalah
+    kalimatnya. Itu sebabnya persona boleh bekerja penuh di sini sementara di
+    jalur bernomor ia dikurung ketat.
+
+    Kalau panggilan ini gagal, kalimat cadangan tetap terbit — pertanyaan
+    sesederhana "siapa kamu?" tidak boleh berakhir sebagai error.
+    """
+    try:
+        res = run_agent(
+            label="Ask/meta",
+            prompt=META_PROMPT.format(persona=persona.preamble(),
+                                      capabilities=persona.CAPABILITIES,
+                                      question=question,
+                                      alasan=(alasan or "tidak ada tool yang cocok")),
+            tools=[], temperature=0.0, max_output_tokens=512)
+        jawaban = (_parse(res.choices[0].message.content).get("answer") or "").strip()
+        if jawaban:
+            return jawaban
+    except Exception:
+        pass
+    return persona.OUT_OF_SCOPE
+
+
 def audit_figures(answer: str, figures: list, results: list | None = None) -> list:
     """
     Nominal di jawaban yang tidak pernah muncul di hasil tool.
@@ -419,12 +542,7 @@ def ask_sentinel(question: str, today: str, data_range: str) -> dict:
 
     steps = planned.get("steps") or []
     if not steps:
-        # `alasan` dari perencana menjelaskan KENAPA ditolak, tapi tidak pernah
-        # menyebut apa yang bisa ditanyakan — dan tanpa itu penanya cuma bisa
-        # menebak. Keduanya digabung: sebab dulu, lalu jalan keluarnya.
-        alasan = (planned.get("alasan") or "").strip()
-        return {"answer": f"{alasan} {persona.OUT_OF_SCOPE}".strip()
-                if alasan else persona.OUT_OF_SCOPE,
+        return {"answer": answer_without_data(question, planned.get("alasan")),
                 "figures": [], "tools_used": [], "steps": []}
 
     results, used = execute(steps)

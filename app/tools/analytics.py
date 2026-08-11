@@ -22,6 +22,7 @@ from typing import Any, Dict
 
 from sqlalchemy import text
 
+from app.core.config import RISKY_VENDOR_STATUSES
 from app.core.constants import (
     RESOLUTION_LABEL,
     RESOLUTIONS,
@@ -39,6 +40,7 @@ MAX_VENDORS = 10
 MAX_TRANSACTIONS = 10
 MAX_DESCRIPTION = 200
 MAX_FINDINGS = 10
+MAX_VENDOR_LIST = 50
 # Trigger per temuan sudah sedikit by design (satu transaksi jarang menyalakan
 # lebih dari lima), tapi batasnya tetap ditulis: yang tak berbatas cepat atau
 # lambat akan tumbuh.
@@ -372,6 +374,97 @@ def _resolve_vendor(db, nama: str):
                       "kandidat": [r[1] for r in rows]}
 
     return rows[0], None
+
+
+def list_vendors(status: str | None = None,
+                 limit: int = MAX_VENDOR_LIST) -> Dict[str, Any]:
+    """
+    Daftar vendor terdaftar, beserta bahan untuk menilainya.
+
+    Ini pertanyaan tentang DATA MASTER, bukan tentang belanja. Sebelumnya
+    "vendor apa saja yang kita punya" jatuh ke get_top_vendors, yang mengurutkan
+    berdasarkan nominal — sehingga vendor yang belum pernah ditransaksikan
+    hilang, dan jawabannya menjadi "tidak ada vendor" untuk perusahaan yang
+    punya enam. Vendor tanpa transaksi justru yang paling perlu terlihat: vendor
+    fiktif selalu dimulai dari sana.
+
+    Kolom `transaksi_terakhir`, `hari_sejak_transaksi_terakhir`, dan
+    `jumlah_temuan` ada supaya pertanyaan seperti "mana yang sudah tidak relevan"
+    atau "mana yang mencurigakan" dijawab dari FIELD, bukan dari kesan. Tanpa
+    ketiganya penilaian semacam itu hanya bisa ditebak, dan tebakan yang
+    terdengar yakin adalah hal yang paling ingin dihindari sistem ini.
+    """
+    db = SessionLocal()
+    try:
+        # "all" / "semua" berarti TANPA penyaring, bukan status bernama "all".
+        # Model menuliskannya karena itu yang wajar dalam bahasa manusia, dan
+        # menerjemahkannya di sini jauh lebih murah daripada membiarkan
+        # `ILIKE '%all%'` mengembalikan nol vendor untuk perusahaan yang punya
+        # enam — kegagalan yang terbaca sebagai "tidak ada data".
+        if status and status.strip().lower() in ("all", "semua", "*", "any"):
+            status = None
+
+        if status:
+            tersedia = [r[0] for r in db.execute(text(
+                "SELECT DISTINCT status FROM vendors WHERE status IS NOT NULL "
+                "ORDER BY status"))]
+            if not any(status.strip().lower() in (s or "").lower()
+                       for s in tersedia):
+                return {"status": "status_tidak_dikenal",
+                        "dicari": status,
+                        "message": (f"Tidak ada vendor berstatus '{status}'. "
+                                    f"Status yang benar-benar dipakai: "
+                                    f"{', '.join(tersedia) or '(tidak ada)'}."),
+                        "status_tersedia": tersedia}
+
+        where = "WHERE v.status ILIKE :st" if status else ""
+        args = {"st": f"%{status.strip()}%"} if status else {}
+
+        total = db.execute(text(
+            f"SELECT COUNT(*) FROM vendors v {where}"), args).scalar()
+
+        rows = db.execute(text(f"""
+            SELECT v.vendor_name, v.status, v.join_date::date,
+                   COUNT(t.id) FILTER (WHERE t.type = 'expense'),
+                   COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'expense'), 0),
+                   to_char(MAX(t.created_at AT TIME ZONE 'Asia/Jakarta'),
+                           'YYYY-MM-DD'),
+                   (now()::date - MAX(t.created_at AT TIME ZONE 'Asia/Jakarta')::date),
+                   COUNT(DISTINCT f.id)
+            FROM vendors v
+            LEFT JOIN transactions t ON t.vendor_id = v.id
+            LEFT JOIN findings f ON f.transaction_id = t.id
+            {where}
+            GROUP BY v.id, v.vendor_name, v.status, v.join_date
+            ORDER BY v.vendor_name
+            LIMIT :limit
+        """), {**args, "limit": max(1, min(limit, MAX_VENDOR_LIST))}).fetchall()
+
+        if not rows:
+            return {"status": "tidak_ada_data",
+                    "message": (f"Tidak ada vendor berstatus '{status}'."
+                                if status else "Belum ada vendor terdaftar.")}
+
+        return {
+            "status": "ok",
+            "jumlah_vendor": total,
+            "ditampilkan": len(rows),
+            "terpotong": total > len(rows),
+            "filter": {"status": status} if status else {},
+            "status_berisiko": list(RISKY_VENDOR_STATUSES),
+            "vendor": [{
+                "nama": r[0],
+                "vendor_status": r[1],
+                "terdaftar_sejak": r[2].strftime("%Y-%m-%d") if r[2] else None,
+                "jumlah_transaksi": r[3],
+                "total_belanja": float(r[4]),
+                "transaksi_terakhir": r[5],
+                "hari_sejak_transaksi_terakhir": r[6],
+                "jumlah_temuan": r[7],
+            } for r in rows],
+        }
+    finally:
+        db.close()
 
 
 def get_vendor_detail(vendor: str, period: str | None = None) -> Dict[str, Any]:
@@ -865,6 +958,7 @@ ASK_TOOLS = [
     get_top_transactions,
     compare_periods,
     get_findings_summary,
+    list_vendors,
     get_vendor_detail,
     search_transactions,
     search_findings,
