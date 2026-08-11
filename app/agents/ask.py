@@ -40,8 +40,8 @@ TOOLS = {
     "list_vendors": (analytics.list_vendors, ("status", "limit")),
     "get_vendor_detail": (analytics.get_vendor_detail, ("vendor", "period")),
     "search_transactions": (analytics.search_transactions, (
-        "period", "vendor", "category", "min_amount", "max_amount",
-        "jenis", "urutkan", "limit")),
+        "period", "vendor", "category", "description", "invoice_no",
+        "min_amount", "max_amount", "jenis", "urutkan", "limit")),
     "search_findings": (analytics.search_findings, (
         "period", "risk_level", "status", "resolution", "vendor",
         "urutkan", "limit")),
@@ -88,7 +88,9 @@ TOOL YANG ADA:
                                         temuan, transaksi terakhirnya.
                                         `vendor` = potongan nama, `period` opsional
   search_transactions(...)              mencari transaksi tertentu. Semua opsional:
-                                        period, vendor, category, min_amount,
+                                        period, vendor, category, description
+                                        (kata dalam deskripsi), invoice_no (nomor
+                                        faktur, cocok persis), min_amount,
                                         max_amount, jenis ("expense"/"income"),
                                         urutkan ("terbaru"/"terlama"/"terbesar"/
                                         "terkecil"), limit
@@ -187,6 +189,11 @@ CARA MEMBACA DATA DI ATAS:
   ditangani" sangat berbeda dari "tidak ada temuan sama sekali".
 - Status "vendor_ambigu" atau "vendor_tidak_ditemukan" bukan kegagalan: sebutkan
   kandidat atau daftar vendor yang ada, lalu minta penanya mempertegas.
+- Kalau ada "penyaring_tidak_didukung", KATAKAN TERUS TERANG bahwa kamu tidak
+  bisa menyaring berdasarkan hal itu. Jangan menyajikan hasilnya seolah menjawab
+  pertanyaan. Kalau "seluruh_penyaring_hilang" bernilai true, hasil itu hanya
+  daftar apa adanya — jawab bahwa pertanyaannya belum bisa dijawab, jangan
+  membacakan barisnya seakan-akan itu jawabannya.
 
 BAHASA JAWABAN — periksa ini sebelum menulis:
 Prompt ini dan sebagian isi data berbahasa Indonesia. Itu TIDAK menentukan
@@ -275,6 +282,19 @@ def execute(steps: list) -> tuple[list, list]:
     Nama tool divalidasi terhadap whitelist dan argumennya disaring — model tidak
     bisa memanggil apa pun di luar daftar, dan tidak bisa menyelundupkan argumen
     tak dikenal.
+
+    Argumen yang dibuang DILAPORKAN, tidak dibuang diam-diam.
+
+    Penyaringannya sendiri benar dan tetap. Yang salah adalah diamnya. Setiap
+    penyaring `search_transactions` bersifat opsional, sehingga panggilan yang
+    seluruh penyaringnya terbuang berubah menjadi "tampilkan semua" dan tetap
+    melapor `status: ok`. "Faktur INV-2024-001 dibayar berapa kali?" dijawab 20
+    baris yang tidak berhubungan, terlihat seperti jawaban.
+
+    Sebuah penyaring yang diminta model adalah pernyataan tentang APA YANG
+    DITANYAKAN. Membuangnya berarti membuang pertanyaannya, dan itu harus
+    terbaca di hasil — sebab jawaban yang salah dengan percaya diri lebih
+    merugikan daripada penolakan yang jujur.
     """
     results, used = [], []
     for step in (steps or [])[:MAX_STEPS]:
@@ -283,13 +303,31 @@ def execute(steps: list) -> tuple[list, list]:
         if not entry:
             results.append({"tool": name, "error": f"Tool '{name}' tidak dikenal."})
             continue
+
         fn, allowed = entry
-        args = {k: v for k, v in (step.get("args") or {}).items() if k in allowed}
+        diminta = (step or {}).get("args") or {}
+        args = {k: v for k, v in diminta.items() if k in allowed}
+        dibuang = {k: v for k, v in diminta.items() if k not in allowed}
+
+        item: dict = {"tool": name, "args": args}
+        if dibuang:
+            item["penyaring_tidak_didukung"] = dibuang
+            item["peringatan_penyaring"] = (
+                f"Penyaring {list(dibuang)} diminta tetapi TIDAK didukung "
+                f"{name}, jadi diabaikan. Hasil di bawah TIDAK tersaring menurut "
+                f"itu dan mungkin tidak menjawab pertanyaannya."
+            )
+            # Seluruh penyaring hilang berarti yang tersisa bukan pencarian lagi,
+            # melainkan daftar apa adanya.
+            item["seluruh_penyaring_hilang"] = not args
+
         try:
-            results.append({"tool": name, "args": args, "result": fn(**args)})
+            item["result"] = fn(**args)
             used.append(name)
         except Exception as e:
-            results.append({"tool": name, "args": args, "error": str(e)[:200]})
+            item["error"] = str(e)[:200]
+        results.append(item)
+
     return results, used
 
 

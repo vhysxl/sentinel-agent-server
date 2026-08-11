@@ -562,6 +562,8 @@ SORT_OPTIONS = {
 
 def search_transactions(period: str | None = None, vendor: str | None = None,
                         category: str | None = None,
+                        description: str | None = None,
+                        invoice_no: str | None = None,
                         min_amount: float | None = None,
                         max_amount: float | None = None,
                         jenis: str = "expense", urutkan: str = "terbaru",
@@ -573,6 +575,15 @@ def search_transactions(period: str | None = None, vendor: str | None = None,
     Seluruh penyaring opsional dan bersifat DAN. Hasilnya dibatasi keras, tetapi
     `total_cocok` selalu ikut supaya terlihat kalau daftarnya terpotong —
     tanpa itu "5 transaksi" bisa terbaca sebagai seluruhnya padahal ada 300.
+
+    `description` dan `invoice_no` ditambahkan karena keduanya adalah dimensi
+    yang benar-benar ditanyakan orang dan sebelumnya tidak terjangkau: pertanyaan
+    seperti "faktur INV-2024-001 dibayar berapa kali" atau "transaksi yang
+    deskripsinya menyebut bonus" tetap dijalankan, tetapi penyaringnya diam-diam
+    dibuang sehingga jawabannya daftar transaksi yang tidak berhubungan.
+
+    `invoice_no` juga membuat pertanyaan pembayaran ganda bisa ditelusuri dari
+    sisi pengguna, memakai kolom yang sama dengan yang dipakai detektor duplikat.
     """
     p = None
     if period:
@@ -609,6 +620,20 @@ def search_transactions(period: str | None = None, vendor: str | None = None,
             where.append("t.category ILIKE :kat")
             args["kat"] = f"%{category.strip()}%"
             filters["kategori"] = category
+
+        if description:
+            where.append("t.description ILIKE :desc")
+            args["desc"] = f"%{description.strip()}%"
+            filters["deskripsi_memuat"] = description
+
+        if invoice_no:
+            # Dicocokkan persis (tanpa peduli besar-kecil huruf), bukan sebagian:
+            # nomor faktur itu pengenal, dan "INV-1" yang ikut menarik "INV-10"
+            # sampai "INV-19" mengubah pertanyaan "dibayar berapa kali" menjadi
+            # jawaban yang salah tanpa terlihat salah.
+            where.append("upper(t.invoice_no) = upper(:inv)")
+            args["inv"] = invoice_no.strip()
+            filters["invoice_no"] = invoice_no
 
         if min_amount is not None:
             where.append("t.amount >= :minamt")
