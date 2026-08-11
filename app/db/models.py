@@ -134,3 +134,32 @@ class TransactionAnalysis(Base):
                          server_default=func.now())
     status = Column(String(12), nullable=False)   # clean | flagged | failed
     error = Column(Text, nullable=True)
+
+
+class BackfillLock(Base):
+    """
+    Penahan agar backfill tidak berjalan dua kali bersamaan. SATU baris, id = 1.
+
+    Menggantikan pg_try_advisory_lock(). Advisory lock menempel pada SESI
+    Postgres, dan dua hal membuatnya tidak bisa dipakai di sini: `Session.close()`
+    hanya mengembalikan koneksi ke pool sehingga kuncinya tidak pernah lepas, dan
+    DATABASE_URL memakai endpoint `-pooler` sehingga kunci bisa diambil di satu
+    backend lalu dicari di backend lain. Alasan lengkapnya di app/core/locking.py.
+
+    `heartbeat_at` yang membuat baris ini tidak bisa jadi kunci abadi: pemegang
+    memperbaruinya tiap transaksi selesai, dan kunci yang diam melewati
+    STALE_AFTER_SECONDS boleh diambil alih.
+
+    Dibaca dan ditulis HANYA lewat app/core/locking.py dengan SQL langsung —
+    pengambilalihan harus atomik dalam satu pernyataan, sesuatu yang tidak bisa
+    diungkapkan lewat ORM. Definisi di sini ada supaya skema milik agent server
+    terdokumentasi di satu tempat.
+    """
+    __tablename__ = "backfill_lock"
+
+    id = Column(Integer, primary_key=True)
+    owner = Column(Text, nullable=False)
+    locked_at = Column(DateTime(timezone=True), nullable=False,
+                       server_default=func.now())
+    heartbeat_at = Column(DateTime(timezone=True), nullable=False,
+                          server_default=func.now())

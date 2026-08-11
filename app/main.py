@@ -28,6 +28,7 @@ from app.agents.agent3 import run_evidence_reviewer
 from app.agents.ask import ask_sentinel
 from app.agents.llm import pinned_model
 from app.core.config import WIB
+from app.core import locking
 from app.core.security import require_internal_key
 from app.core.constants import (
     RESOLUTIONS,
@@ -73,12 +74,6 @@ class AnalyzeRequest(BaseModel):
     # saat aturan deteksi diubah; di luar itu biarkan False supaya klik berulang
     # tidak membayar LLM untuk pekerjaan yang sama.
     force: bool = False
-
-
-# Kunci advisory Postgres untuk backfill. Angkanya sembarang, yang penting sama
-# di setiap proses. Advisory lock dipilih karena Postgres melepaskannya sendiri
-# saat koneksi mati — jadi proses yang crash tidak meninggalkan kunci abadi.
-BACKFILL_LOCK_KEY = 728301
 
 
 class AskRequest(BaseModel):
@@ -662,24 +657,31 @@ async def run_backfill(request: AnalyzeRequest):
     balasan model tidak terurai — dan kalau ikut dilewati satu kegagalan jadi
     permanen tanpa ada yang memperbaikinya.
     """
-    db = SessionLocal()
-
     # Dikunci sebelum stream dibuka, supaya penolakan bisa berupa 409 biasa dan
     # bukan stream yang isinya cuma pesan error.
     #
     # Tanpa ini dua klik bersamaan sama-sama melihat "belum ada finding" untuk
     # transaksi yang sama lalu sama-sama insert; `findings.transaction_id` itu
     # unique, jadi yang kalah tercatat `failed` padahal tidak ada yang salah.
-    acquired = db.execute(
-        text("SELECT pg_try_advisory_lock(:k)"), {"k": BACKFILL_LOCK_KEY}
-    ).scalar()
+    owner = locking.acquire()
 
-    if not acquired:
-        db.close()
+    if owner is None:
+        # Penolakan menyertakan sudah berapa lama kunci dipegang dan berapa lama
+        # ia diam. Tanpa dua angka itu, 409 yang sah dan 409 akibat kunci
+        # menggantung terlihat persis sama dari sisi pemanggil.
+        held = locking.holder() or {}
         return JSONResponse(
             status_code=409,
-            content={"error": "Pemeriksaan lain sedang berjalan. Tunggu sampai selesai."},
+            content={
+                "error": "Pemeriksaan lain sedang berjalan. Tunggu sampai selesai.",
+                "locked_by": held.get("owner"),
+                "held_seconds": held.get("held_seconds"),
+                "silent_seconds": held.get("silent_seconds"),
+                "takeover_after_seconds": locking.STALE_AFTER_SECONDS,
+            },
         )
+
+    db = SessionLocal()
 
     def event_stream():
         try:
@@ -712,6 +714,25 @@ async def run_backfill(request: AnalyzeRequest):
                 tally[event["phase"]] += 1
                 yield sse_event(event)
 
+                # Denyut ditaruh SESUDAH transaksi selesai, bukan sebelum: yang
+                # perlu dibuktikan masih hidup adalah pekerjaan yang barusan
+                # rampung, bukan niat mengerjakannya.
+                #
+                # False berarti kunci sudah diambil alih — proses ini terlanjur
+                # dianggap basi. Berhenti saat itu juga; melanjutkan berarti dua
+                # backfill menulis findings yang sama.
+                if not locking.heartbeat(owner):
+                    yield sse_event({
+                        "status": "error",
+                        "message": (
+                            f"Dihentikan setelah {i} dari {len(ids)} transaksi: "
+                            f"kunci backfill diambil alih proses lain. "
+                            f"Yang sudah diperiksa tetap tersimpan — jalankan "
+                            f"ulang untuk meneruskan sisanya."
+                        ),
+                    })
+                    return
+
             yield sse_event({
                 "status": "complete",
                 "summary": {"diperiksa": len(ids),
@@ -726,6 +747,15 @@ async def run_backfill(request: AnalyzeRequest):
         except Exception as e:
             yield sse_event({"status": "error", "message": str(e)})
         finally:
+            # Kunci dilepas di sini, dan itu menutup kebocoran yang membuat versi
+            # advisory lock menolak run berikutnya padahal tidak ada yang jalan.
+            #
+            # Blok ini juga berjalan saat klien memutus koneksi di tengah stream
+            # (tutup tab, cancel) — Starlette menutup generator, GeneratorExit
+            # melewati `finally`. Kalau prosesnya mati mendadak sehingga blok ini
+            # tidak sempat jalan, denyut yang berhenti membuat kunci bisa diambil
+            # alih setelah STALE_AFTER_SECONDS.
+            locking.release(owner)
             db.close()
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

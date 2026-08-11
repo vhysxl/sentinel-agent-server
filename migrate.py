@@ -66,6 +66,23 @@ OWNED_TABLES_DDL = [
         CONSTRAINT ta_status_chk CHECK (status IN ('clean','flagged','failed'))
     )
     """,
+    # Menahan dua backfill berjalan bersamaan.
+    #
+    # Menggantikan pg_try_advisory_lock(), yang tidak bisa dipakai di endpoint
+    # `-pooler` (PgBouncer transaction pooling) dan tidak pernah terlepas karena
+    # Session.close() hanya mengembalikan koneksi ke pool. Lihat app/core/locking.py.
+    #
+    # CHECK (id = 1) membuat "hanya boleh ada satu kunci" jadi sifat skema, bukan
+    # kesepakatan yang harus diingat tiap pemanggil.
+    """
+    CREATE TABLE IF NOT EXISTS backfill_lock (
+        id           INT PRIMARY KEY,
+        owner        TEXT NOT NULL,
+        locked_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+        heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT backfill_lock_single_row_chk CHECK (id = 1)
+    )
+    """,
 ]
 
 # Perubahan pada tabel bersama `transactions`. Lihat PERINGATAN di atas.
@@ -173,7 +190,7 @@ def run_migrations():
     # Laporan akhir supaya hasilnya bisa dilihat, bukan diasumsikan.
     with engine.connect() as conn:
         print("\nHasil:")
-        for table in ("findings", "transaction_analysis"):
+        for table in ("findings", "transaction_analysis", "backfill_lock"):
             exists = conn.execute(text(
                 "SELECT to_regclass(:t) IS NOT NULL"
             ), {"t": f"public.{table}"}).scalar()
