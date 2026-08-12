@@ -127,7 +127,7 @@ def seed():
         v_atk = get_or_create_vendor(db, "CV. ATK Sejahtera", "active")
         v_it = get_or_create_vendor(db, "PT. Solusi Teknologi Makmur", "active")
         v_ops = get_or_create_vendor(db, "PT Ashiap Kita", "active")
-        v_fake = get_or_create_vendor(db, "CV Fiktif Sukses Makmur", "high_risk")
+        v_fake = get_or_create_vendor(db, "CV Fiktif Sukses Makmur", "inactive")
         v_split = get_or_create_vendor(db, "PT Konsultan Bayangan", "active")
         db.commit()
         print(f"Vendor: atk={v_atk} it={v_it} ops={v_ops} fiktif={v_fake} split={v_split}")
@@ -205,7 +205,7 @@ def seed():
 
         # ------------------------------------------------------------------
         # KASUS B — duplicate payment. Faktur SAMA dibayar dua kali, vendor
-        # berstatus high_risk, pukul 23:15 WIB.
+        # berstatus inactive (tapi tetap dibayar), pukul 23:15 WIB.
         # ------------------------------------------------------------------
         b_invoice = "INV-2026-0731"
         b1 = wib(12, 23, 15)
@@ -230,6 +230,12 @@ def seed():
         # Jarak antar transaksi sengaja >= 24 jam (hari ke-1, 3, 5) supaya tidak
         # ikut memicu aturan duplicate — nominalnya sama, jadi kalau berdekatan
         # akan tertangkap sebagai duplikat dan kasusnya jadi ambigu.
+        #
+        # Nominalnya sengaja identik di ketiganya, jadi kasus ini SEKALIGUS
+        # memicu detect_smurfing (3x nominal sama, di atas floor Rp2jt) selain
+        # detect_split_payment. Itu bukan tumpang tindih yang keliru: satu
+        # transaksi yang sama-sama mepet di bawah garis bulat DAN berulang
+        # dengan nominal identik memang lebih mencurigakan, bukan kurang.
         # ------------------------------------------------------------------
         case_b2_ids = []
         for i, day_offset in enumerate([40, 38, 36]):
@@ -356,16 +362,16 @@ def write_expectations(cases: dict):
                 "expected_base_score": 80,
                 "expected_adjustment": "zero",
                 "expected_band": "Critical Risk",
-                "why": "invoice_no sama dibayar dua kali; vendor high_risk; 23:15 WIB. Critical tercapai tanpa bantuan LLM.",
+                "why": "invoice_no sama dibayar dua kali; vendor berstatus inactive; 23:15 WIB. Critical tercapai tanpa bantuan LLM.",
             },
             {
                 "id": "B2", "name": "Split payment",
                 "transaction_ids": cases["B2"]["transaction_ids"],
-                "expected_triggers": ["split_payment", "role_bypass"],
-                "expected_base_score": 60,
+                "expected_triggers": ["split_payment", "smurfing_pattern"],
+                "expected_base_score": 80,
                 "expected_adjustment": "zero",
-                "expected_band": "High Risk",
-                "why": "3 x 24jt (pita 20-25jt) total 72jt melewati ambang 25jt, diinput finance_staff.",
+                "expected_band": "Critical Risk",
+                "why": "3 x 24jt (pita 20-25jt) total 72jt melewati ambang 25jt; nominal identik berulang juga memicu smurfing_pattern. Raw 90 di-cap ke 80.",
             },
             {
                 "id": "C", "name": "Transaksi normal",

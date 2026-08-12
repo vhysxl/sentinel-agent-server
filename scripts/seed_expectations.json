@@ -33,7 +33,7 @@
       "expected_base_score": 80,
       "expected_adjustment": "zero",
       "expected_band": "Critical Risk",
-      "why": "invoice_no sama dibayar dua kali; vendor high_risk; 23:15 WIB. Critical tercapai tanpa bantuan LLM."
+      "why": "invoice_no sama dibayar dua kali; vendor berstatus inactive; 23:15 WIB. Critical tercapai tanpa bantuan LLM."
     },
     {
       "id": "B2",
@@ -45,12 +45,12 @@
       ],
       "expected_triggers": [
         "split_payment",
-        "role_bypass"
+        "smurfing_pattern"
       ],
-      "expected_base_score": 60,
+      "expected_base_score": 80,
       "expected_adjustment": "zero",
-      "expected_band": "High Risk",
-      "why": "3 x 24jt (pita 20-25jt) total 72jt melewati ambang 25jt, diinput finance_staff."
+      "expected_band": "Critical Risk",
+      "why": "3 x 24jt (pita 20-25jt) total 72jt melewati ambang 25jt; nominal identik berulang juga memicu smurfing_pattern. Raw 90 di-cap ke 80."
     },
     {
       "id": "C",

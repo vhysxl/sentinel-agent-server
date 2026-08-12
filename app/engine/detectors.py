@@ -23,6 +23,9 @@ from app.core.config import (
     APPROVAL_THRESHOLD,
     NEW_VENDOR_MAX_TRANSACTIONS,
     RISKY_VENDOR_STATUSES,
+    SMURF_MIN_AMOUNT,
+    SMURF_MIN_COUNT,
+    SMURF_WINDOW_DAYS,
     SPLIT_BAND_FACTOR,
     SPLIT_MIN_COUNT,
     SPLIT_WINDOW_DAYS,
@@ -31,7 +34,6 @@ from app.core.config import (
     WORK_START_HOUR,
 )
 from app.core.format import kelipatan, ringkas, rupiah, tanggal
-from app.core.roles import FINANCE_STAFF, role_of
 from app.engine import statistics as stats
 
 AGENT_1 = "agent_1_financial"
@@ -300,13 +302,14 @@ def detect_split_payment(db, txn) -> Optional[Trigger]:
         narrative=(
             f"{len(rows)} pembayaran masing-masing {rupiah(amount)} ke vendor yang "
             f"sama dalam {SPLIT_WINDOW_DAYS} hari, total {rupiah(total)}. Setiap "
-            f"pembayaran berhenti tepat di bawah batas persetujuan "
-            f"{rupiah(APPROVAL_THRESHOLD)}, jadi tidak ada satu pun yang perlu "
-            f"disetujui atasan — padahal totalnya jauh melewati batas itu."
+            f"pembayaran berhenti tepat di bawah angka bulat {rupiah(APPROVAL_THRESHOLD)} "
+            f"— pola yang lazim dipakai untuk membuat satu pengeluaran besar "
+            f"terlihat sebagai beberapa pengeluaran kecil, padahal totalnya jauh "
+            f"melewati angka itu."
         ),
         detail={
-            "rule": "below_approval_threshold",
-            "approval_threshold": APPROVAL_THRESHOLD,
+            "rule": "below_round_number_threshold",
+            "reference_threshold": APPROVAL_THRESHOLD,
             "band_low": low,
             "window_days": SPLIT_WINDOW_DAYS,
             "match_count": len(rows),
@@ -317,34 +320,65 @@ def detect_split_payment(db, txn) -> Optional[Trigger]:
     )
 
 
-def detect_role_bypass(db, txn, has_split: bool) -> Optional[Trigger]:
+def detect_smurfing(db, txn) -> Optional[Trigger]:
     """
-    Split payment yang dilakukan staff, bukan lead.
+    Nominal identik dibayar berulang ke vendor yang sama.
 
-    Hanya berlaku bersama split_payment. Staff yang memecah pembayaran menghindari
-    persetujuan yang seharusnya wajib; lead yang melakukan hal sama tidak
-    memperoleh apa pun karena ia memang berwenang menyetujui nominal itu.
+    Beda dengan split_payment: di sini nominalnya TIDAK harus dekat garis bulat
+    manapun. Sinyalnya murni FREKUENSI nominal identik yang tidak lazim —
+    pola khas "smurfing", memecah satu pengeluaran besar jadi banyak pecahan
+    kecil yang identik, disebar dalam beberapa hari.
+
+    Syarat, semuanya harus terpenuhi:
+      - nominal > SMURF_MIN_AMOUNT (floor, bukan pita — pecahan sekecil uang
+        parkir/konsumsi terlalu umum berulang secara wajar untuk jadi sinyal)
+      - ada >= SMURF_MIN_COUNT transaksi bernominal SAMA PERSIS ke vendor yang
+        sama dalam WINDOW hari
+
+    MIN_COUNT sengaja 3, bukan 2 — dua pembayaran identik berdekatan masih
+    wajar (mis. cicilan dua termin). Tiga kali atau lebih dengan nominal
+    identik dalam seminggu jarang terjadi pada pengeluaran yang sah.
     """
-    if not has_split or not txn.input_by_user_id:
+    if not txn.vendor_id:
         return None
 
-    row = db.execute(text(
-        "SELECT fullname, is_admin FROM users WHERE id = :i"
-    ), {"i": txn.input_by_user_id}).fetchone()
-    if not row:
+    amount = float(txn.amount)
+    if amount <= SMURF_MIN_AMOUNT:
         return None
 
-    role = role_of(row[1])
-    if role != FINANCE_STAFF:
+    rows = db.execute(text("""
+        SELECT id, to_char(created_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD HH24:MI')
+        FROM transactions
+        WHERE vendor_id = :v AND type = 'expense' AND amount = :a
+          AND created_at BETWEEN :lo AND :hi
+        ORDER BY created_at
+    """), {
+        "v": txn.vendor_id, "a": txn.amount,
+        "lo": txn.created_at - timedelta(days=SMURF_WINDOW_DAYS),
+        "hi": txn.created_at + timedelta(days=SMURF_WINDOW_DAYS),
+    }).fetchall()
+
+    if len(rows) < SMURF_MIN_COUNT:
         return None
 
+    total = amount * len(rows)
     return Trigger(
-        code="role_bypass", points=10, owner=AGENT_2,
+        code="smurfing_pattern", points=40, owner=AGENT_2,
         narrative=(
-            f"Pemecahan ini dilakukan oleh {row[0]}, staf keuangan — yaitu pihak "
-            f"yang justru wajib meminta persetujuan atasan untuk nominal sebesar itu."
+            f"{len(rows)} pembayaran dengan nominal identik ({rupiah(amount)}) ke "
+            f"vendor yang sama dalam {SMURF_WINDOW_DAYS} hari, pada "
+            f"{', '.join(r[1] for r in rows)} WIB. Total {rupiah(total)}. Frekuensi "
+            f"pembayaran identik seperti ini tidak lazim untuk satu vendor — "
+            f"indikasi satu pengeluaran besar yang sengaja dipecah rata."
         ),
-        detail={"user_id": txn.input_by_user_id, "role": role},
+        detail={
+            "rule": "repeated_identical_amount",
+            "min_amount_floor": SMURF_MIN_AMOUNT,
+            "window_days": SMURF_WINDOW_DAYS,
+            "match_count": len(rows),
+            "total_amount": total,
+            "transaction_ids": [r[0] for r in rows],
+        },
     )
 
 
@@ -418,12 +452,18 @@ def detect_vendor_backdated(db, txn) -> Optional[Trigger]:
 
 def detect_vendor_risk(db, txn) -> Optional[Trigger]:
     """
-    Vendor berstatus berisiko, atau vendor yang riwayatnya masih terlalu tipis.
+    Vendor nonaktif yang masih dibayar, atau vendor yang riwayatnya masih terlalu tipis.
 
-    Keduanya tidak pernah dijumlahkan — diambil yang tertinggi. Dimiliki Agent 2
-    saja. Sebelumnya Agent 1 dan Agent 2 sama-sama menilai vendor, sehingga fakta
-    yang sama dihitung dua kali, lalu ditambal dengan mem-parsing string "(+30)"
-    dari teks agen untuk membatalkannya.
+    Status vendor di app HANYA 'active'/'inactive' (lihat
+    vendor.validation.js) — tidak ada tingkatan risiko lain di data master.
+    Dibayar padahal berstatus nonaktif berarti: lupa dinonaktifkan, atau
+    sengaja tetap dipakai walau semestinya sudah berhenti. Keduanya layak
+    diperiksa.
+
+    Kedua cabang tidak pernah dijumlahkan — diambil yang tertinggi. Dimiliki
+    Agent 2 saja. Sebelumnya Agent 1 dan Agent 2 sama-sama menilai vendor,
+    sehingga fakta yang sama dihitung dua kali, lalu ditambal dengan
+    mem-parsing string "(+30)" dari teks agen untuk membatalkannya.
     """
     if not txn.vendor_id:
         return None
@@ -441,8 +481,8 @@ def detect_vendor_risk(db, txn) -> Optional[Trigger]:
     if status in RISKY_VENDOR_STATUSES:
         return Trigger(
             code="vendor_flagged", points=30, owner=AGENT_2,
-            narrative=(f"Vendor {name} sudah ditandai berisiko ('{status}') "
-                       f"di data master vendor."),
+            narrative=(f"Vendor {name} berstatus nonaktif di data master, "
+                       f"tapi transaksi ini tetap dibayarkan ke sana."),
             detail={"vendor_id": txn.vendor_id, "vendor_name": name,
                     "vendor_status": status, "total_transactions": total},
         )
@@ -470,17 +510,11 @@ def run_all(db, txn) -> list[Trigger]:
     triggers: list[Trigger] = []
 
     for detector in (detect_amount_anomaly, detect_timing, detect_duplicate,
-                     detect_vendor_risk, detect_vendor_backdated):
+                     detect_vendor_risk, detect_vendor_backdated,
+                     detect_split_payment, detect_smurfing):
         found = detector(db, txn)
         if found:
             triggers.append(found)
-
-    split = detect_split_payment(db, txn)
-    if split:
-        triggers.append(split)
-        bypass = detect_role_bypass(db, txn, has_split=True)
-        if bypass:
-            triggers.append(bypass)
 
     return triggers
 

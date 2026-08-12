@@ -301,7 +301,7 @@ class TestAcceptanceCases:
     def test_case_b2_split_payment_high_at_base(self):
         result = finalize(calculate_base_score([
             trigger("split_payment", 50),
-            trigger("role_bypass", 10),
+            trigger("smurfing_pattern", 10),
         ]), 0)
         assert result["base_risk_score"] == 60
         assert result["risk_level"] == RISK_HIGH
