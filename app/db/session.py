@@ -5,6 +5,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from dotenv import load_dotenv
 
 load_dotenv()
+# `.env.local` (konvensi frontend/Next.js) lebih diprioritaskan bila ada.
+load_dotenv(dotenv_path=".env.local")
 
 # Database URL from User
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")

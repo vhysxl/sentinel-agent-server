@@ -81,7 +81,7 @@ def _model_setting(key: str) -> str | None:
     seperti yang diharapkan. os.environ hanya dipakai kalau .env tidak ada
     (mis. saat dijalankan di container dengan env var sungguhan).
     """
-    path = find_dotenv(usecwd=True)
+    path = find_dotenv(".env.local", usecwd=True) or find_dotenv(usecwd=True)
     if path:
         return dotenv_values(path).get(key)
     return os.environ.get(key)
@@ -126,6 +126,7 @@ def run_agent(*, label: str, prompt: str, tools: list, agent: str | None = None,
     `agent` menentukan model mana yang dipakai (lihat pinned_model).
     """
     load_dotenv(override=True)
+    load_dotenv(".env.local", override=True)
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
     model = pinned_model(agent)
 

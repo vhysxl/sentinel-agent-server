@@ -1,317 +1,81 @@
 [
   {
-    "transaction_id": 706,
+    "id": 28,
+    "transaction_id": 1955,
     "related_transaction_ids": [
-      706,
-      707
+      1955,
+      1956
     ],
-    "finding": "Telah ditemukan indikasi penyimpangan serius pada transaksi ID 706 senilai Rp25.000.000. Investigasi kami mengonfirmasi adanya pembayaran ganda untuk faktur yang sama (INV-2026-0731), sehingga total dana yang keluar mencapai Rp50.000.000. Transaksi ini dilakukan oleh staf keuangan di luar jam kerja operasional kepada vendor yang terdaftar dengan status risiko tinggi. Mengingat pendapatan perusahaan pada Juli 2026 sebesar Rp1.181.440.000, pengeluaran ganda ini tidak memiliki dasar bisnis yang sah dan berpotensi merugikan perusahaan. Kami merekomendasikan pembatalan transaksi, peninjauan ulang terhadap vendor tersebut, serta audit internal terhadap prosedur input data oleh staf terkait.",
-    "investigation": {
-      "agent1_verdict": "risk",
-      "agent1_confidence": "high",
-      "agent2_verdict": "risk",
-      "agent2_confidence": "high",
-      "verdict_review": {
-        "agent1": "agreed",
-        "agent2": "agreed",
-        "reason": "Kedua detektif memberikan temuan yang konsisten dengan data objektif. Keduanya menggunakan angka pendapatan yang tepat sesuai konteks (Rp1.181.440.000) dan mengidentifikasi masalah utama yaitu pembayaran ganda serta risiko vendor."
-      }
-    },
-    "provenance": {
-      "generated_by": "Agent_3_Final_Review",
-      "tools_used": [
-        "compare_category_baseline",
-        "get_monthly_expense_trend",
-        "get_user_spending_pattern",
-        "get_vendor_transaction_history"
-      ],
-      "scored_by": "python_scoring_engine",
-      "llm_model": "models/gemini-3.1-flash-lite",
-      "llm_model_verifier": "models/gemini-3.1-flash-lite"
-    },
-    "evidence": {
-      "objective": [
-        {
-          "code": "insufficient_baseline",
-          "points": 0,
-          "owner": "agent_1_financial",
-          "amplifier_only": true,
-          "narrative": "Belum ada cukup riwayat untuk membandingkan nilai ini — hanya 4 transaksi sejenis yang tercatat sebelumnya. Artinya kewajaran nominalnya belum bisa dinilai, bukan berarti sudah aman.",
-          "detail": {
-            "scope": "none",
-            "method": "insufficient_baseline",
-            "n_baseline": 4,
-            "median": null,
-            "mad": null,
-            "threshold": 3.5,
-            "computed_value": null,
-            "confidence": "none",
-            "is_anomaly": false,
-            "message": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar."
-          }
-        },
-        {
-          "code": "timing_outside_hours",
-          "points": 20,
-          "owner": "agent_1_financial",
-          "amplifier_only": true,
-          "narrative": "Tercatat Senin, 20 Juli 2026 pukul 23:15 WIB — di luar jam kerja (Senin-Jumat 08:00-17:59).",
-          "detail": {
-            "evaluated_field": "created_at",
-            "reason": "waktu pencatatan ditulis server, tidak dapat diubah dari form",
-            "recorded_at_wib": "2026-07-20 23:15:00",
-            "time_wib": "23:15:00",
-            "weekday": "Monday",
-            "timezone": "Asia/Jakarta",
-            "work_hours": "08:00-17:59"
-          }
-        },
-        {
-          "code": "duplicate_confirmed",
-          "points": 50,
-          "owner": "agent_2_fraud",
-          "amplifier_only": false,
-          "narrative": "Faktur INV-2026-0731 dibayar 2 kali ke vendor yang sama. Total yang keluar Rp50.000.000 untuk satu tagihan, sehingga ada Rp25.000.000 berpotensi kelebihan bayar. Pembayaran pada 2026-07-20 23:15, 2026-07-21 01:15 WIB.",
-          "detail": {
-            "rule": "same_invoice_no",
-            "invoice_no": "INV-2026-0731",
-            "match_count": 2,
-            "total_amount": 50000000.0,
-            "transaction_ids": [
-              706,
-              707
-            ]
-          }
-        },
-        {
-          "code": "vendor_flagged",
-          "points": 30,
-          "owner": "agent_2_fraud",
-          "amplifier_only": false,
-          "narrative": "Vendor CV Fiktif Sukses Makmur sudah ditandai berisiko ('high_risk') di data master vendor.",
-          "detail": {
-            "vendor_id": 5,
-            "vendor_name": "CV Fiktif Sukses Makmur",
-            "vendor_status": "high_risk",
-            "total_transactions": 2
-          }
-        }
-      ],
-      "context": [
-        {
-          "source": "get_vendor_transaction_history",
-          "insight": "Vendor hanya memiliki riwayat transaksi yang sangat terbatas, sehingga tidak ada data historis untuk memverifikasi kewajaran nominal Rp25.000.000."
-        },
-        {
-          "source": "get_monthly_expense_trend",
-          "insight": "Transaksi ini tidak mencerminkan tren kenaikan biaya operasional yang sistematis, melainkan muncul sebagai pengeluaran tunggal yang tidak terduga."
-        },
-        {
-          "source": "compare_category_baseline",
-          "insight": "Kategori konsultasi memiliki data pembanding yang terlalu sedikit untuk memberikan justifikasi statistik atas nominal transaksi ini."
-        },
-        {
-          "source": "get_user_spending_pattern",
-          "insight": "User 'testingraihan' melakukan input transaksi ganda untuk vendor yang sama dalam waktu singkat, yang tidak lazim untuk prosedur pembayaran konsultasi."
-        },
-        {
-          "source": "get_vendor_transaction_history",
-          "insight": "Vendor hanya memiliki 2 transaksi dalam riwayatnya, keduanya merupakan bagian dari pembayaran ganda ini, menunjukkan vendor baru yang langsung terlibat dalam transaksi mencurigakan."
-        },
-        {
-          "source": "get_monthly_expense_trend",
-          "insight": "Tidak ditemukan tren biaya konsultasi yang mendukung kebutuhan pembayaran ganda sebesar Rp50.000.000 di bulan Juli 2026."
-        }
-      ],
-      "semantic": [
-        {
-          "source": "revenue_context",
-          "insight": "Pendapatan perusahaan pada Juli 2026 tercatat sebesar Rp1.181.440.000, yang mengonfirmasi bahwa transaksi ganda ini tidak proporsional."
-        }
-      ]
-    },
-    "agent_results": {
-      "agent1": {
-        "verdict": "risk",
-        "confidence": "high",
-        "finding": "Transaksi sebesar Rp25.000.000 kepada 'CV Fiktif Sukses Makmur' menunjukkan indikasi risiko tinggi. Pertama, vendor ini memiliki status risiko tinggi dan riwayat transaksi yang sangat minim, sehingga tidak ada pola pembayaran yang dapat memvalidasi kewajaran nominal ini. Kedua, pencatatan transaksi dilakukan di luar jam kerja operasional (pukul 23:15 WIB dan 01:15 WIB), yang tidak lazim untuk pembayaran jasa konsultasi profesional. Terakhir, tren pengeluaran bulanan menunjukkan bahwa transaksi ini berdiri sendiri dan tidak sejalan dengan pertumbuhan revenue perusahaan yang cenderung stagnan di angka Rp1.181.440.000.",
-        "provenance": {
-          "generated_by": "Agent_1_Financial_Analytics",
-          "tools_used": [
-            "get_monthly_expense_trend",
-            "compare_category_baseline",
-            "get_vendor_transaction_history"
-          ]
-        },
-        "evidence": {
-          "context": [
-            {
-              "source": "get_vendor_transaction_history",
-              "insight": "Vendor hanya memiliki riwayat transaksi yang sangat terbatas, sehingga tidak ada data historis untuk memverifikasi kewajaran nominal Rp25.000.000."
-            },
-            {
-              "source": "get_monthly_expense_trend",
-              "insight": "Transaksi ini tidak mencerminkan tren kenaikan biaya operasional yang sistematis, melainkan muncul sebagai pengeluaran tunggal yang tidak terduga."
-            },
-            {
-              "source": "compare_category_baseline",
-              "insight": "Kategori konsultasi memiliki data pembanding yang terlalu sedikit untuk memberikan justifikasi statistik atas nominal transaksi ini."
-            }
-          ]
-        }
-      },
-      "agent2": {
-        "verdict": "risk",
-        "confidence": "high",
-        "finding": "Terdapat pembayaran ganda untuk faktur INV-2026-0731 dengan total nilai Rp50.000.000, di mana masing-masing transaksi sebesar Rp25.000.000 dibayarkan pada waktu yang berdekatan (selisih 2 jam). Selain itu, vendor 'CV Fiktif Sukses Makmur' memiliki status risiko tinggi. Mengingat revenue perusahaan pada bulan Juli 2026 sebesar Rp1.181.440.000, pengeluaran ganda yang tidak terjustifikasi ini merupakan indikasi kuat adanya kelalaian atau kesengajaan dalam proses pembayaran.",
-        "provenance": {
-          "generated_by": "Agent_2_Fraud_Investigator",
-          "tools_used": [
-            "get_user_spending_pattern",
-            "get_vendor_transaction_history",
-            "get_monthly_expense_trend"
-          ]
-        },
-        "evidence": {
-          "context": [
-            {
-              "source": "get_user_spending_pattern",
-              "insight": "User 'testingraihan' melakukan input transaksi ganda untuk vendor yang sama dalam waktu singkat, yang tidak lazim untuk prosedur pembayaran konsultasi."
-            },
-            {
-              "source": "get_vendor_transaction_history",
-              "insight": "Vendor hanya memiliki 2 transaksi dalam riwayatnya, keduanya merupakan bagian dari pembayaran ganda ini, menunjukkan vendor baru yang langsung terlibat dalam transaksi mencurigakan."
-            },
-            {
-              "source": "get_monthly_expense_trend",
-              "insight": "Tidak ditemukan tren biaya konsultasi yang mendukung kebutuhan pembayaran ganda sebesar Rp50.000.000 di bulan Juli 2026."
-            }
-          ]
-        }
-      },
-      "agent3": {
-        "finding": "Telah ditemukan indikasi penyimpangan serius pada transaksi ID 706 senilai Rp25.000.000. Investigasi kami mengonfirmasi adanya pembayaran ganda untuk faktur yang sama (INV-2026-0731), sehingga total dana yang keluar mencapai Rp50.000.000. Transaksi ini dilakukan oleh staf keuangan di luar jam kerja operasional kepada vendor yang terdaftar dengan status risiko tinggi. Mengingat pendapatan perusahaan pada Juli 2026 sebesar Rp1.181.440.000, pengeluaran ganda ini tidak memiliki dasar bisnis yang sah dan berpotensi merugikan perusahaan. Kami merekomendasikan pembatalan transaksi, peninjauan ulang terhadap vendor tersebut, serta audit internal terhadap prosedur input data oleh staf terkait.",
-        "verdict_review": {
-          "agent1": "agreed",
-          "agent2": "agreed",
-          "reason": "Kedua detektif memberikan temuan yang konsisten dengan data objektif. Keduanya menggunakan angka pendapatan yang tepat sesuai konteks (Rp1.181.440.000) dan mengidentifikasi masalah utama yaitu pembayaran ganda serta risiko vendor."
-        },
-        "provenance": {
-          "generated_by": "Agent_3_Evidence_Review",
-          "tools_used": [
-            "get_vendor_transaction_history",
-            "get_monthly_expense_trend",
-            "get_user_spending_pattern"
-          ]
-        },
-        "evidence": {
-          "semantic": [
-            {
-              "source": "revenue_context",
-              "insight": "Pendapatan perusahaan pada Juli 2026 tercatat sebesar Rp1.181.440.000, yang mengonfirmasi bahwa transaksi ganda ini tidak proporsional."
-            }
-          ]
-        },
-        "scoring": {
-          "llm_semantic_adjustment": 0,
-          "adjustment_reason": "Temuan detektif sudah sangat akurat dan didukung penuh oleh data objektif, sehingga tidak diperlukan penyesuaian skor."
-        }
-      }
-    },
-    "scoring": {
-      "base_risk_score": 80,
-      "raw_score": 100,
-      "capped": true,
-      "max_base_score": 80,
-      "agent_scores": [
-        {
-          "agent": "agent_1_financial",
-          "score": 20
-        },
-        {
-          "agent": "agent_2_fraud",
-          "score": 80
-        }
-      ],
-      "objective_triggers": [
-        {
-          "code": "insufficient_baseline",
-          "points": 0,
-          "owner": "agent_1_financial",
-          "amplifier_only": true,
-          "narrative": "Belum ada cukup riwayat untuk membandingkan nilai ini — hanya 4 transaksi sejenis yang tercatat sebelumnya. Artinya kewajaran nominalnya belum bisa dinilai, bukan berarti sudah aman.",
-          "detail": {
-            "scope": "none",
-            "method": "insufficient_baseline",
-            "n_baseline": 4,
-            "median": null,
-            "mad": null,
-            "threshold": 3.5,
-            "computed_value": null,
-            "confidence": "none",
-            "is_anomaly": false,
-            "message": "Baseline tidak mencukupi: vendor punya 1 transaksi pembanding (minimum 10), kategori 4 (minimum 20). Nominal tidak dinilai secara statistik. Ini BUKAN pernyataan bahwa transaksi ini wajar."
-          }
-        },
-        {
-          "code": "timing_outside_hours",
-          "points": 20,
-          "owner": "agent_1_financial",
-          "amplifier_only": true,
-          "narrative": "Tercatat Senin, 20 Juli 2026 pukul 23:15 WIB — di luar jam kerja (Senin-Jumat 08:00-17:59).",
-          "detail": {
-            "evaluated_field": "created_at",
-            "reason": "waktu pencatatan ditulis server, tidak dapat diubah dari form",
-            "recorded_at_wib": "2026-07-20 23:15:00",
-            "time_wib": "23:15:00",
-            "weekday": "Monday",
-            "timezone": "Asia/Jakarta",
-            "work_hours": "08:00-17:59"
-          }
-        },
-        {
-          "code": "duplicate_confirmed",
-          "points": 50,
-          "owner": "agent_2_fraud",
-          "amplifier_only": false,
-          "narrative": "Faktur INV-2026-0731 dibayar 2 kali ke vendor yang sama. Total yang keluar Rp50.000.000 untuk satu tagihan, sehingga ada Rp25.000.000 berpotensi kelebihan bayar. Pembayaran pada 2026-07-20 23:15, 2026-07-21 01:15 WIB.",
-          "detail": {
-            "rule": "same_invoice_no",
-            "invoice_no": "INV-2026-0731",
-            "match_count": 2,
-            "total_amount": 50000000.0,
-            "transaction_ids": [
-              706,
-              707
-            ]
-          }
-        },
-        {
-          "code": "vendor_flagged",
-          "points": 30,
-          "owner": "agent_2_fraud",
-          "amplifier_only": false,
-          "narrative": "Vendor CV Fiktif Sukses Makmur sudah ditandai berisiko ('high_risk') di data master vendor.",
-          "detail": {
-            "vendor_id": 5,
-            "vendor_name": "CV Fiktif Sukses Makmur",
-            "vendor_status": "high_risk",
-            "total_transactions": 2
-          }
-        }
-      ],
-      "suppressed_triggers": [
-        {
-          "code": "timing_outside_hours",
-          "points": 20,
-          "reason": "trigger eksklusif dengan poin lebih rendah"
-        }
-      ],
-      "llm_semantic_adjustment": 0,
-      "adjustment_reason": "Temuan detektif sudah sangat akurat dan didukung penuh oleh data objektif, sehingga tidak diperlukan penyesuaian skor.",
-      "final_risk_score": 80,
-      "risk_level": "Critical Risk",
-      "recommendation": "Indikasi fraud fatal. Eskalasi darurat ke Manajer/CFO."
-    }
+    "risk_score": 80,
+    "risk_level": "critical",
+    "risk_label": "Kritis",
+    "recommended_action": "Indikasi fraud serius. Eskalasi ke Manajer/CFO sekarang.",
+    "description": "Belum ada cukup riwayat untuk membandingkan nilai ini — hanya 4 transaksi sejenis yang tercatat sebelumnya. Artinya kewajaran nominalnya belum bisa dinilai, bukan berarti sudah aman. Tercatat Senin, 20 Juli 2026 pukul 23:15 WIB — di luar jam kerja (Senin-Jumat 08:00-17:59). Faktur INV-2026-0731 dibayar 2 kali ke vendor yang sama. Total yang keluar Rp50.000.000 untuk satu tagihan, sehingga ada Rp25.000.000 berpotensi kelebihan bayar. Pembayaran pada 2026-07-20 23:15, 2026-07-21 01:15 WIB. Vendor CV Fiktif Sukses Makmur sudah ditandai berisiko ('high_risk') di data master vendor.",
+    "resolution": null,
+    "resolution_note": null,
+    "resolved_by": null,
+    "resolved_at": null,
+    "created_at": "2026-08-11 20:58:14.082618+00:00",
+    "updated_at": null,
+    "narrative_stale": false
+  },
+  {
+    "id": 26,
+    "transaction_id": 1957,
+    "related_transaction_ids": [
+      1957,
+      1958,
+      1959
+    ],
+    "risk_score": 60,
+    "risk_level": "high",
+    "risk_label": "Tinggi",
+    "recommended_action": "Indikasi kecurangan. Perlu diverifikasi manual minggu ini.",
+    "description": "Belum ada cukup riwayat untuk membandingkan nilai ini — hanya 4 transaksi sejenis yang tercatat sebelumnya. Artinya kewajaran nominalnya belum bisa dinilai, bukan berarti sudah aman. 3 pembayaran masing-masing Rp24.000.000 ke vendor yang sama dalam 7 hari, total Rp72.000.000. Setiap pembayaran berhenti tepat di bawah batas persetujuan Rp25.000.000, jadi tidak ada satu pun yang perlu disetujui atasan — padahal totalnya jauh melewati batas itu. Pemecahan ini dilakukan oleh Test Staff, staf keuangan — yaitu pihak yang justru wajib meminta persetujuan atasan untuk nominal sebesar itu.",
+    "resolution": null,
+    "resolution_note": null,
+    "resolved_by": null,
+    "resolved_at": null,
+    "created_at": "2026-08-11 20:57:17.077822+00:00",
+    "updated_at": null,
+    "narrative_stale": false
+  },
+  {
+    "id": 27,
+    "transaction_id": 1922,
+    "related_transaction_ids": [
+      1922
+    ],
+    "risk_score": 50,
+    "risk_level": "medium",
+    "risk_label": "Sedang",
+    "recommended_action": "Anomali ringan. Cukup dicatat di laporan audit bulanan.",
+    "description": "Nilai Rp45.000.000 jauh di atas kebiasaan vendor ini, yang biasanya sekitar Rp1,7 juta per transaksi (dari 30 transaksi sebelumnya) — sekitar 26 kali lipat.",
+    "resolution": null,
+    "resolution_note": null,
+    "resolved_by": null,
+    "resolved_at": null,
+    "created_at": "2026-08-11 20:57:37.736921+00:00",
+    "updated_at": null,
+    "narrative_stale": false
+  },
+  {
+    "id": 25,
+    "transaction_id": 1941,
+    "related_transaction_ids": [
+      1941
+    ],
+    "risk_score": 30,
+    "risk_level": "low",
+    "risk_label": "Rendah",
+    "recommended_action": "Transaksi wajar. Tidak perlu tindakan.",
+    "description": "Transaksi senilai Rp120.000.000 kepada PT. Solusi Teknologi Makmur untuk penambahan kapasitas server dan lisensi adalah transaksi yang wajar dan dapat dijelaskan secara bisnis. Meskipun nominalnya sekitar 12 kali lipat dari rata-rata transaksi bulanan ke vendor ini (yang biasanya berkisar antara Rp7 juta hingga Rp14 juta), pengeluaran ini merupakan investasi infrastruktur satu kali (one-off) yang sangat krusial untuk menopang lonjakan bisnis. Pada bulan Juni 2026, pendapatan perusahaan melonjak signifikan sebesar 43,39% menjadi Rp1.170.080.000,01 (naik dari Rp816.000.000 pada bulan sebelumnya). Lonjakan pendapatan ini membenarkan adanya kebutuhan mendesak untuk meningkatkan kapasitas server guna menghindari gangguan layanan akibat lonjakan order. Setelah transaksi ini, biaya bulanan ke vendor kembali normal ke kisaran Rp7,2 juta hingga Rp10,5 juta. Transaksi diinput oleh staf keuangan yang berwenang (Yogi Ferdiansyah) yang memang biasa menangani transaksi bernilai besar. Tidak ditemukan indikasi fraud atau penyimpangan prosedur. Tindakan yang disarankan adalah menyetujui transaksi ini dan mengarsipkannya sebagai pengeluaran investasi infrastruktur IT non-rutin yang valid.",
+    "resolution": null,
+    "resolution_note": null,
+    "resolved_by": null,
+    "resolved_at": null,
+    "created_at": "2026-08-11 20:56:37.288279+00:00",
+    "updated_at": null,
+    "narrative_stale": false
   }
 ]

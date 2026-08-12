@@ -1,0 +1,687 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sentinel Agent Server",
+    "description": "Multi-Agent AI Financial Analyst",
+    "version": "3.0.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Read Root",
+        "operationId": "read_root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transactions/{transaction_id}/analyze": {
+      "post": {
+        "summary": "Analyze One",
+        "description": "Fire-and-forget. Dipanggil aplikasi setelah transaksi masuk dari bank.\n\nKembali seketika; pekerjaannya berjalan setelah respons terkirim. Pengguna\nyang menyimpan transaksi tidak boleh menunggu 15 detik.",
+        "operationId": "analyze_one_api_transactions__transaction_id__analyze_post",
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Transaction Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/findings": {
+      "get": {
+        "summary": "List Findings",
+        "description": "Antrean kerja. `status`: open | resolved | all.\n\nDiurutkan berdasarkan keparahan lalu skor — yang perlu ditindak lebih dulu\nmuncul lebih dulu.",
+        "operationId": "list_findings_api_findings_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "open",
+                "resolved",
+                "all"
+              ],
+              "type": "string",
+              "default": "open",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "risk_level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Risk Level"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FindingRow"
+                  },
+                  "title": "Response List Findings Api Findings Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/findings/{finding_id}": {
+      "get": {
+        "summary": "Get Finding",
+        "operationId": "get_finding_api_findings__finding_id__get",
+        "parameters": [
+          {
+            "name": "finding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Finding Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/findings/{finding_id}/resolve": {
+      "patch": {
+        "summary": "Resolve Finding",
+        "description": "Menutup sebuah temuan dengan ALASAN, bukan sekadar centang.\n\nKenapa alasannya wajib: kalau lead menutup sepuluh temuan z-score\nberturut-turut sebagai `justified`, itu sinyal ambangnya kekencangan.\nBoolean tidak memberi informasi itu.",
+        "operationId": "resolve_finding_api_findings__finding_id__resolve_patch",
+        "parameters": [
+          {
+            "name": "finding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Finding Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/summary": {
+      "get": {
+        "summary": "Summary",
+        "description": "Baris pertama yang dilihat orang keuangan saat membuka tab.\n\n\"aman\" hanya bisa dihitung karena ada transaction_analysis — tanpa itu,\nsudah-diperiksa-dan-bersih tidak bisa dibedakan dari belum-pernah-dilihat.",
+        "operationId": "summary_api_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ask": {
+      "post": {
+        "summary": "Ask",
+        "description": "Tanya jawab keuangan. Sekali tanya, sekali jawab — tanpa riwayat percakapan.\n\nModel tidak pernah menerima baris transaksi, dan tidak pernah memanggil tool\nsendiri: ia memilih tool + periode, Python menjalankannya, lalu model\nmenarasikan angka yang sudah jadi. `figures` dirakit Python dari hasil tool,\nbukan oleh model.",
+        "operationId": "ask_api_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyze": {
+      "post": {
+        "summary": "Run Backfill",
+        "description": "Memeriksa seluruh transaksi dalam rentang, satu per satu, dengan progres SSE.\n\nIa memanggil `analyze_transaction` yang sama persis dengan jalur lain —\nsupaya tidak ada dua jalur yang bisa memberi hasil berbeda.\n\nDAPAT DILANJUTKAN. Transaksi yang sudah diperiksa dan berstatus clean atau\nflagged dilewati, jadi koneksi yang putus di tengah bukan kegagalan: klik\nberikutnya meneruskan dari sisa, bukan mengulang dari awal. Ini yang membuat\nbatas durasi fungsi bisa ditoleransi.\n\n`failed` SENGAJA tidak dilewati. Kegagalan biasanya sementara — kuota habis,\nbalasan model tidak terurai — dan kalau ikut dilewati satu kegagalan jadi\npermanen tanpa ada yang memperbaikinya.",
+        "operationId": "run_backfill_api_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalyzeRequest": {
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "title": "End Date"
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_date",
+          "end_date"
+        ],
+        "title": "AnalyzeRequest"
+      },
+      "AskRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "AskRequest"
+      },
+      "FindingRow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "transaction_id": {
+            "type": "integer",
+            "title": "Transaction Id"
+          },
+          "related_transaction_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Related Transaction Ids"
+          },
+          "risk_score": {
+            "type": "integer",
+            "title": "Risk Score"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "title": "Risk Level"
+          },
+          "risk_label": {
+            "type": "string",
+            "title": "Risk Label"
+          },
+          "recommended_action": {
+            "type": "string",
+            "title": "Recommended Action"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "justified",
+                  "false_positive",
+                  "confirmed_fraud",
+                  "escalated"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution"
+          },
+          "resolution_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Note"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "narrative_stale": {
+            "type": "boolean",
+            "title": "Narrative Stale"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "analysis": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "transaction_id",
+          "related_transaction_ids",
+          "risk_score",
+          "risk_level",
+          "risk_label",
+          "recommended_action",
+          "description",
+          "resolution",
+          "resolution_note",
+          "resolved_by",
+          "resolved_at",
+          "created_at",
+          "updated_at",
+          "narrative_stale"
+        ],
+        "title": "FindingRow",
+        "description": "Satu baris temuan, bentuk tetap dari `_finding_row` di main.py."
+      },
+      "FindingSummary": {
+        "properties": {
+          "perlu_tindakan": {
+            "type": "integer",
+            "title": "Perlu Tindakan"
+          },
+          "perlu_ditinjau": {
+            "type": "integer",
+            "title": "Perlu Ditinjau"
+          },
+          "aman": {
+            "type": "integer",
+            "title": "Aman"
+          },
+          "gagal": {
+            "type": "integer",
+            "title": "Gagal"
+          },
+          "belum_diperiksa": {
+            "type": "integer",
+            "title": "Belum Diperiksa"
+          },
+          "total_transaksi": {
+            "type": "integer",
+            "title": "Total Transaksi"
+          },
+          "per_tingkat": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical"
+              ]
+            },
+            "type": "object",
+            "title": "Per Tingkat"
+          },
+          "selesai": {
+            "type": "integer",
+            "title": "Selesai"
+          },
+          "total_temuan": {
+            "type": "integer",
+            "title": "Total Temuan"
+          },
+          "clear_rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clear Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "perlu_tindakan",
+          "perlu_ditinjau",
+          "aman",
+          "gagal",
+          "belum_diperiksa",
+          "total_transaksi",
+          "per_tingkat",
+          "selesai",
+          "total_temuan",
+          "clear_rate"
+        ],
+        "title": "FindingSummary",
+        "description": "Bentuk tetap dari endpoint /api/summary."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ResolveRequest": {
+        "properties": {
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "justified",
+              "false_positive",
+              "confirmed_fraud",
+              "escalated"
+            ],
+            "title": "Resolution"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resolution"
+        ],
+        "title": "ResolveRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
