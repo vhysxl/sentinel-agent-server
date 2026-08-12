@@ -355,13 +355,24 @@ def _extend_finding(db, finding: Finding, group_ids: list[int], triggers: list):
 # Inti: analisis satu transaksi
 # ---------------------------------------------------------------------------
 
-def analyze_transaction(db, transaction_id: int) -> dict:
+def analyze_transaction(db, transaction_id: int):
     """
     Memeriksa satu transaksi. Inilah yang dipanggil saat transaksi masuk.
 
     LLM hanya disentuh kalau `is_candidate` bernilai True. Trigger amplifier
     (jam di luar kerja, baseline tidak cukup) tidak pernah cukup sendirian —
     itulah yang membuat 61 dari 68 transaksi berhenti gratis di Python.
+
+    Generator karena `yield from _create_finding(...)` di jalur kandidat.
+    Jalur clean/updated/failed tidak pernah menyentuh `yield` itu sama sekali,
+    jadi perilakunya sama seperti dulu: langsung `return` tanpa yield apa pun.
+    Nilai `return`-nya (dict status yang sama seperti sebelumnya) diambil
+    pemanggil lewat `StopIteration.value` — lihat `event_stream()` di bawah.
+
+    PENTING untuk pemanggil lain: karena badan fungsi ini mengandung `yield`,
+    memanggilnya TIDAK menjalankan apa pun sampai generatornya diiterasi
+    (`for _ in analyze_transaction(...): pass`, bukan sekadar
+    `analyze_transaction(...)`). `analyze_one()` di bawah sudah disesuaikan.
     """
     try:
         txn = db.get(Transaction, transaction_id)
@@ -390,7 +401,7 @@ def analyze_transaction(db, transaction_id: int) -> dict:
             return {"status": "updated", "finding_id": existing.id,
                     "covered": existing.related_transaction_ids}
 
-        finding = _create_finding(db, transaction_id, group, triggers)
+        finding = yield from _create_finding(db, transaction_id, group, triggers)
         _record_analysis(db, transaction_id, STATUS_FLAGGED)
         return {"status": "created", "finding_id": finding.id,
                 "risk_level": finding.risk_level, "risk_score": finding.risk_score}
@@ -401,20 +412,40 @@ def analyze_transaction(db, transaction_id: int) -> dict:
         return {"status": STATUS_FAILED, "error": str(e)}
 
 
-def _create_finding(db, transaction_id: int, group: list[int], triggers: list) -> Finding:
-    """Temuan baru: skor dihitung Python dulu, baru LLM dipanggil untuk narasi."""
+def _create_finding(db, transaction_id: int, group: list[int], triggers: list):
+    """
+    Temuan baru: skor dihitung Python dulu, baru LLM dipanggil untuk narasi.
+
+    Generator, bukan fungsi biasa. Dulu ini diam total selama ~15 detik sambil
+    ketiga agen bekerja, lalu satu event progress muncul di ujungnya — jadi
+    apa pun yang mencoba menampilkan agen mana yang sedang jalan cuma bisa
+    menebak. Sekarang ia yield penanda mulai/selesai TEPAT di titik itu
+    terjadi secara sinkron, jadi pemanggil (lewat `yield from`) mendapat sinyal
+    yang jujur, bukan animasi. Agent 1 & 2 memang berjalan bersamaan di thread
+    pool, jadi mulai/selesainya ditandai berpasangan — itu representasi yang
+    benar, bukan disederhanakan.
+
+    Hasil akhirnya adalah nilai `return` (ditangkap lewat `StopIteration.value`
+    / `yield from`), persis seperti fungsi biasa — PEP 380.
+    """
     base_scoring = calculate_base_score(triggers)
 
     facts_a1 = build_facts(db, transaction_id, triggers, AGENT_1)
     facts_a2 = build_facts(db, transaction_id, triggers, AGENT_2)
 
+    yield {"agent": "agent1", "agent_phase": "started"}
+    yield {"agent": "agent2", "agent_phase": "started"}
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         f1 = executor.submit(run_financial_investigator, transaction_id, facts_a1)
         f2 = executor.submit(run_fraud_investigator, transaction_id, facts_a2)
         json_a1, json_a2 = _safe_agent(f1), _safe_agent(f2)
+    yield {"agent": "agent1", "agent_phase": "done"}
+    yield {"agent": "agent2", "agent_phase": "done"}
 
+    yield {"agent": "agent3", "agent_phase": "started"}
     json_a3 = _safe_agent_call(run_evidence_reviewer, transaction_id,
                                json_a1, json_a2, base_scoring, facts_a1)
+    yield {"agent": "agent3", "agent_phase": "done"}
 
     a3 = json_a3.get("scoring", {}) or {}
     scoring = finalize(base_scoring, a3.get("llm_semantic_adjustment", 0),
@@ -452,7 +483,13 @@ def analyze_one(transaction_id: int, background: BackgroundTasks):
     def job():
         db = SessionLocal()
         try:
-            analyze_transaction(db, transaction_id)
+            # analyze_transaction is now a generator (it contains `yield from`
+            # in its candidate branch) — calling it builds the generator but
+            # runs none of its body. It has to be driven to completion, or a
+            # transaction coming in from the bank would silently never get
+            # analyzed at all.
+            for _ in analyze_transaction(db, transaction_id):
+                pass
         finally:
             db.close()
 
@@ -709,8 +746,26 @@ async def run_backfill(request: AnalyzeRequest):
             tally = {PHASE_CREATED: 0, PHASE_UPDATED: 0,
                      PHASE_CLEAN: 0, PHASE_FAILED: 0}
             for i, tid in enumerate(ids, 1):
-                event = _progress_event(i, len(ids), tid,
-                                        analyze_transaction(db, tid))
+                # analyze_transaction is a generator: driving it by hand (not
+                # `yield from`) is what lets each yielded item be wrapped in
+                # its own SSE frame — a plain `yield from` would forward the
+                # raw dicts unformatted. `StopIteration.value` carries the
+                # same result dict the function used to `return` directly.
+                run = analyze_transaction(db, tid)
+                try:
+                    while True:
+                        sub_event = next(run)
+                        yield sse_event({
+                            "status": "agent",
+                            "index": i,
+                            "total": len(ids),
+                            "transaction_id": tid,
+                            **sub_event,
+                        })
+                except StopIteration as stop:
+                    result = stop.value
+
+                event = _progress_event(i, len(ids), tid, result)
                 tally[event["phase"]] += 1
                 yield sse_event(event)
 
