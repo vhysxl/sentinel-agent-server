@@ -364,11 +364,13 @@ def analyze_transaction(db, transaction_id: int):
     (jam di luar kerja, baseline tidak cukup) tidak pernah cukup sendirian —
     itulah yang membuat 61 dari 68 transaksi berhenti gratis di Python.
 
-    Generator karena `yield from _create_finding(...)` di jalur kandidat.
-    Jalur clean/updated/failed tidak pernah menyentuh `yield` itu sama sekali,
-    jadi perilakunya sama seperti dulu: langsung `return` tanpa yield apa pun.
-    Nilai `return`-nya (dict status yang sama seperti sebelumnya) diambil
-    pemanggil lewat `StopIteration.value` — lihat `event_stream()` di bawah.
+    Generator: yield langsung sendiri untuk penanda `query` (deteksi, jalan
+    untuk semua transaksi expense), plus `yield from _create_finding(...)` di
+    jalur kandidat untuk penanda agent1/agent2/agent3. Jalur not-found/bukan-
+    expense tidak menyentuh `yield` sama sekali, jadi perilakunya sama seperti
+    dulu: langsung `return` tanpa yield apa pun. Nilai `return`-nya (dict
+    status yang sama seperti sebelumnya) diambil pemanggil lewat
+    `StopIteration.value` — lihat `event_stream()` di bawah.
 
     PENTING untuk pemanggil lain: karena badan fungsi ini mengandung `yield`,
     memanggilnya TIDAK menjalankan apa pun sampai generatornya diiterasi
@@ -385,7 +387,14 @@ def analyze_transaction(db, transaction_id: int):
             _record_analysis(db, transaction_id, STATUS_CLEAN)
             return {"status": STATUS_CLEAN, "reason": "bukan pengeluaran"}
 
+        # Unlike the agent1/agent2/agent3 markers below, this runs for EVERY
+        # expense transaction, not just candidates — it is what decides
+        # candidacy in the first place. That is the honest picture: the
+        # query step fires constantly, the agent steps rarely.
+        yield {"agent": "query", "agent_phase": "started"}
         triggers = detectors.run_all(db, txn)
+        yield {"agent": "query", "agent_phase": "done"}
+
         if not detectors.is_candidate(triggers):
             _record_analysis(db, transaction_id, STATUS_CLEAN)
             return {"status": STATUS_CLEAN, "triggers": len(triggers)}
