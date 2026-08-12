@@ -163,3 +163,22 @@ class BackfillLock(Base):
                        server_default=func.now())
     heartbeat_at = Column(DateTime(timezone=True), nullable=False,
                           server_default=func.now())
+
+
+class AskHistory(Base):
+    """
+    Riwayat pertanyaan dan jawaban dari Ask Sentinel.
+    """
+    __tablename__ = "ask_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    data_range = Column(String(100), nullable=True)
+    figures = Column(JSONB, nullable=True)
+    tools_used = Column(JSONB, nullable=True)
+    steps = Column(JSONB, nullable=True)
+    unsourced_figures = Column(JSONB, nullable=True)
+    warning = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        server_default=func.now())

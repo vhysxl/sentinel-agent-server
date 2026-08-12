@@ -11,10 +11,12 @@ Jalankan:  python -m pytest tests/test_api_helpers.py -v
 """
 import os
 import sys
+from datetime import date, datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.main import (
+    _day_bounds_wib,
     _fallback_narrative,
     _progress_event,
     _split_payload,
@@ -22,6 +24,7 @@ from app.main import (
     parse_agent_json,
     sse_event,
 )
+from app.core.config import WIB
 from app.core.constants import (
     RISK_CRITICAL,
     RISK_HIGH,
@@ -184,3 +187,36 @@ class TestMergeGroupTriggers:
         b = trigger("z_score_anomaly", 30, AGENT_1, detail={})
         merged = merge_group_triggers({1: [a], 2: [b]}, [1, 2])
         assert {t.code for t in merged} == {"split_payment", "z_score_anomaly"}
+
+
+# ---------------------------------------------------------------------------
+# Batas tanggal riwayat Ask Sentinel (WIB, end_date inklusif)
+# ---------------------------------------------------------------------------
+
+class TestDayBoundsWib:
+    def test_no_dates_returns_no_bounds(self):
+        assert _day_bounds_wib(None, None) == (None, None)
+
+    def test_start_date_is_midnight_wib(self):
+        start, end = _day_bounds_wib(date(2026, 8, 12), None)
+        assert start == datetime(2026, 8, 12, tzinfo=WIB)
+        assert end is None
+
+    def test_end_date_is_exclusive_start_of_next_day(self):
+        """
+        A naive `created_at <= end_date` would compare against midnight of
+        end_date itself, silently dropping anything logged later that same
+        day. The bound here must be the *next* day's midnight instead.
+        """
+        _, end = _day_bounds_wib(None, date(2026, 8, 12))
+        assert end == datetime(2026, 8, 13, tzinfo=WIB)
+
+    def test_end_of_day_entry_falls_within_bounds(self):
+        _, end = _day_bounds_wib(None, date(2026, 8, 12))
+        almost_midnight = datetime(2026, 8, 12, 23, 59, 59, tzinfo=WIB)
+        assert almost_midnight < end
+
+    def test_next_day_entry_falls_outside_bounds(self):
+        _, end = _day_bounds_wib(None, date(2026, 8, 12))
+        next_day = datetime(2026, 8, 13, 0, 0, 0, tzinfo=WIB)
+        assert not (next_day < end)

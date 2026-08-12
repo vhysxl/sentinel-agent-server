@@ -7,7 +7,8 @@
   "variable": [
     { "key": "baseUrl", "value": "http://127.0.0.1:8000", "type": "string" },
     { "key": "transactionId", "value": "1", "type": "string" },
-    { "key": "findingId", "value": "1", "type": "string" }
+    { "key": "findingId", "value": "1", "type": "string" },
+    { "key": "internalApiKey", "value": "", "type": "string", "description": "Set locally from your own .env INTERNAL_API_KEY — never commit a real value here." }
   ],
   "item": [
     {
@@ -185,7 +186,10 @@
           "name": "Tanya keuangan",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Internal-Key", "value": "{{internalApiKey}}" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"question\": \"summary keuangan Juni 2026\"\n}",
@@ -207,6 +211,41 @@
                   "pm.test('200', () => pm.response.to.have.status(200));",
                   "const r = pm.response.json();",
                   "pm.test('tiap angka punya sumber', () => pm.expect(r.unsourced_figures || []).to.be.empty);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Riwayat Tanya",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Internal-Key", "value": "{{internalApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ask/history?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ask", "history"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "topic", "value": "pengeluaran", "disabled": true, "description": "Filter pencarian kata di dalam pertanyaan" },
+                { "key": "start_date", "value": "2026-08-01", "disabled": true, "description": "Mulai dari tanggal" },
+                { "key": "end_date", "value": "2026-08-31", "disabled": true, "description": "Sampai dengan tanggal" }
+              ]
+            },
+            "description": "Mengambil riwayat pertanyaan dan jawaban yang pernah ditanyakan ke Ask Sentinel.\n\nMengembalikan daftar objek dengan id, question, answer, data_range, figures, tools_used, steps, unsourced_figures, warning, dan created_at."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const a = pm.response.json();",
+                  "pm.test('array', () => pm.expect(a).to.be.an('array'));"
                 ]
               }
             }

@@ -14,7 +14,7 @@ tidak pernah menyentuh LLM sama sekali.
 """
 import concurrent.futures
 import json
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,7 +27,7 @@ from app.agents.agent2 import run_fraud_investigator
 from app.agents.agent3 import run_evidence_reviewer
 from app.agents.ask import ask_sentinel
 from app.agents.llm import pinned_model
-from app.api_models import FindingRow, FindingStatus, FindingSummary, Resolution
+from app.api_models import FindingRow, FindingStatus, FindingSummary, Resolution, AskHistoryRow
 from app.core.config import WIB
 from app.core import locking
 from app.core.security import require_internal_key
@@ -40,7 +40,7 @@ from app.core.constants import (
     STATUS_FAILED,
     STATUS_FLAGGED,
 )
-from app.db.models import Finding, Transaction, TransactionAnalysis
+from app.db.models import Finding, Transaction, TransactionAnalysis, AskHistory
 from app.db.session import SessionLocal
 from app.engine import detectors
 from app.engine.detectors import AGENT_1, AGENT_2
@@ -667,15 +667,128 @@ def ask(request: AskRequest):
         data_range = (f"{span[0]} s/d {span[1]}" if span and span[0]
                       else "belum ada transaksi")
     finally:
+        # Closed BEFORE the LLM call, not after: ask_sentinel can take several
+        # seconds, and idling a pooled connection for that long starves the
+        # pool under any real concurrency. A second, short-lived session opens
+        # below just for the insert.
         db.close()
 
     result = ask_sentinel(question, datetime.now(WIB).strftime("%d-%m-%Y"), data_range)
+
+    # Planning/narration failure: `result` carries `error`/`detail` and no
+    # `answer`, so there is nothing worth logging as a Q&A pair. Returning
+    # early here also means `**result` below still surfaces the error to the
+    # caller exactly as before.
+    if "error" in result:
+        return {"question": question, "data_range": data_range, **result}
+
     unsourced = result.get("unsourced_figures") or []
+    warning_text = ("Ada angka di jawaban yang tidak berasal dari hasil query."
+                    if unsourced else None)
+
+    db = SessionLocal()
+    try:
+        history_entry = AskHistory(
+            question=question,
+            answer=result.get("answer", ""),
+            data_range=data_range,
+            figures=result.get("figures"),
+            tools_used=result.get("tools_used"),
+            steps=result.get("steps"),
+            unsourced_figures=unsourced,
+            warning=warning_text,
+        )
+        db.add(history_entry)
+        db.commit()
+        db.refresh(history_entry)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
     return {
-        "question": question, "data_range": data_range, **result,
-        "warning": ("Ada angka di jawaban yang tidak berasal dari hasil query."
-                    if unsourced else None),
+        "id": history_entry.id,
+        "question": question,
+        "data_range": data_range,
+        **result,
+        "warning": warning_text,
+        "created_at": str(history_entry.created_at),
     }
+
+
+def _day_bounds_wib(
+    start_date: date | None, end_date: date | None
+) -> tuple[datetime | None, datetime | None]:
+    """
+    Batas awal/akhir hari kalender WIB untuk filter tanggal riwayat Ask Sentinel.
+
+    Murni — tidak menyentuh database — supaya bisa diuji langsung, sama seperti
+    `_progress_event`/`_split_payload` di atas.
+
+    `end_date` diterjemahkan sebagai awal hari BERIKUTNYA (eksklusif), bukan
+    tengah malam tanggal itu sendiri: filter `created_at <= end_date` yang naif
+    membuang semua yang dicatat setelah jam 00:00 WIB pada hari itu sendiri,
+    padahal maksudnya "sampai dengan akhir hari itu".
+    """
+    start_boundary = (
+        datetime(start_date.year, start_date.month, start_date.day, tzinfo=WIB)
+        if start_date else None
+    )
+    end_boundary = (
+        datetime(end_date.year, end_date.month, end_date.day, tzinfo=WIB) + timedelta(days=1)
+        if end_date else None
+    )
+    return start_boundary, end_boundary
+
+
+@app.get("/api/ask/history", response_model=list[AskHistoryRow])
+def get_ask_history(
+    limit: int = 50,
+    topic: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+):
+    """
+    Mendapatkan riwayat pertanyaan dan jawaban yang pernah ditanyakan ke Ask Sentinel.
+
+    `start_date`/`end_date` adalah tanggal kalender WIB, inklusif di kedua
+    ujung — lihat `_day_bounds_wib`.
+    """
+    limit = max(1, min(limit, 200))
+    start_boundary, end_boundary = _day_bounds_wib(start_date, end_date)
+
+    db = SessionLocal()
+    try:
+        q = db.query(AskHistory)
+
+        if topic:
+            q = q.filter(AskHistory.question.ilike(f"%{topic}%"))
+
+        if start_boundary:
+            q = q.filter(AskHistory.created_at >= start_boundary)
+
+        if end_boundary:
+            q = q.filter(AskHistory.created_at < end_boundary)
+
+        rows = q.order_by(AskHistory.created_at.desc()).limit(limit).all()
+        return [
+            {
+                "id": r.id,
+                "question": r.question,
+                "answer": r.answer,
+                "data_range": r.data_range,
+                "figures": r.figures,
+                "tools_used": r.tools_used,
+                "steps": r.steps,
+                "unsourced_figures": r.unsourced_figures,
+                "warning": r.warning,
+                "created_at": str(r.created_at)
+            }
+            for r in rows
+        ]
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------
