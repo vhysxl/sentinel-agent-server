@@ -75,3 +75,18 @@ class FindingSummary(BaseModel):
     selesai: int
     total_temuan: int
     clear_rate: int | None
+
+
+class AskHistoryRow(BaseModel):
+    """Satu baris riwayat pertanyaan Ask Sentinel."""
+
+    id: int
+    question: str
+    answer: str
+    data_range: str | None
+    figures: list[dict] | None
+    tools_used: list[str] | None
+    steps: list[dict] | None
+    unsourced_figures: list[dict] | None
+    warning: str | None
+    created_at: str

@@ -83,6 +83,20 @@ OWNED_TABLES_DDL = [
         CONSTRAINT backfill_lock_single_row_chk CHECK (id = 1)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS ask_history (
+        id                SERIAL PRIMARY KEY,
+        question          TEXT NOT NULL,
+        answer            TEXT NOT NULL,
+        data_range        VARCHAR(100),
+        figures           JSONB,
+        tools_used        JSONB,
+        steps             JSONB,
+        unsourced_figures JSONB,
+        warning           TEXT,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+    """,
 ]
 
 # Perubahan pada tabel bersama `transactions`. Lihat PERINGATAN di atas.
