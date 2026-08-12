@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt pytest
+      - name: Run tests
+        run: python -m pytest tests -q
+        # Importing app.main pulls in app.db.session, which builds the SQLAlchemy
+        # engine at import time. create_engine is lazy (no connection made), so
+        # a structurally valid URL is enough; the URL is never dialed here.
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
