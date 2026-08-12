@@ -29,11 +29,11 @@ dan alat yang tidak dibaca tidak menahan fraud apa pun.
 KENAPA TIDAK MENILAI ORANG
 --------------------------
 Data ini memuat nama: `input_by_user_id` menempel pada tiap transaksi, dan
-trigger `role_bypass` menyebut nama staf secara terbuka. Menyimpulkan NIAT dari
-pola angka adalah lompatan yang tidak dijamin data mana pun, dan tuduhan
-terhadap orang bernama tidak bisa ditarik kembali setelah terbaca. Sentinel
-melaporkan apa yang tercatat; yang menilai orang adalah manusia yang berwenang,
-dengan bukti di luar sistem ini.
+temuan seperti `timing_outside_hours` bisa dirangkai balik ke siapa yang
+menginput. Menyimpulkan NIAT dari pola angka adalah lompatan yang tidak
+dijamin data mana pun, dan tuduhan terhadap orang bernama tidak bisa ditarik
+kembali setelah terbaca. Sentinel melaporkan apa yang tercatat; yang menilai
+orang adalah manusia yang berwenang, dengan bukti di luar sistem ini.
 """
 
 # Siapa Sentinel, dan untuk siapa ia bekerja.
