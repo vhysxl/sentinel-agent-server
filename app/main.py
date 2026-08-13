@@ -144,24 +144,24 @@ def _progress_event(index: int, total: int, transaction_id: int, result: dict) -
                 "finding_id": result.get("finding_id"),
                 "risk_level": result.get("risk_level"),
                 "risk_score": result.get("risk_score"),
-                "message": (f"{prefix} Temuan baru untuk transaksi {transaction_id} "
+                "message": (f"{prefix} New finding for transaction {transaction_id} "
                             f"— {result.get('risk_level')} ({result.get('risk_score')})")}
 
     if st == "updated":
         return {**base, "node": "finding", "phase": PHASE_UPDATED,
                 "finding_id": result.get("finding_id"),
-                "message": (f"{prefix} Transaksi {transaction_id} bergabung ke temuan "
-                            f"#{result.get('finding_id')} — tanpa LLM")}
+                "message": (f"{prefix} Transaction {transaction_id} merged into finding "
+                            f"#{result.get('finding_id')} — no LLM call")}
 
     if st == STATUS_FAILED:
         return {**base, "node": "error", "phase": PHASE_FAILED,
-                "message": f"{prefix} Transaksi {transaction_id} GAGAL"}
+                "message": f"{prefix} Transaction {transaction_id} FAILED"}
 
     # Bersih. Dulu tidak menerbitkan apa pun, dan itulah sebabnya ~90% iterasi
     # tidak terlihat: penghitung di layar diam berlama-lama lalu melompat. Yang
     # ditampilkan bukan progres yang sebenarnya. Sekarang ikut terbit.
     return {**base, "node": "clean", "phase": PHASE_CLEAN,
-            "message": f"{prefix} Transaksi {transaction_id} bersih"}
+            "message": f"{prefix} Transaction {transaction_id} clean"}
 
 
 def _safe_agent(future) -> dict:
@@ -828,7 +828,7 @@ async def run_backfill(request: AnalyzeRequest):
         return JSONResponse(
             status_code=409,
             content={
-                "error": "Pemeriksaan lain sedang berjalan. Tunggu sampai selesai.",
+                "error": "Another analysis run is already in progress. Please wait for it to finish.",
                 "locked_by": held.get("owner"),
                 "held_seconds": held.get("held_seconds"),
                 "silent_seconds": held.get("silent_seconds"),
@@ -855,7 +855,7 @@ async def run_backfill(request: AnalyzeRequest):
             # `total` disertakan supaya UI tidak perlu mengurai "[3/12]" dari
             # kalimat untuk tahu panjang antreannya.
             yield sse_event({"status": "info",
-                             "message": f"{len(ids)} transaksi akan diperiksa.",
+                             "message": f"{len(ids)} transactions to be checked.",
                              "total": len(ids),
                              "start_date": request.start_date,
                              "end_date": request.end_date,
@@ -898,10 +898,10 @@ async def run_backfill(request: AnalyzeRequest):
                     yield sse_event({
                         "status": "error",
                         "message": (
-                            f"Dihentikan setelah {i} dari {len(ids)} transaksi: "
-                            f"kunci backfill diambil alih proses lain. "
-                            f"Yang sudah diperiksa tetap tersimpan — jalankan "
-                            f"ulang untuk meneruskan sisanya."
+                            f"Stopped after {i} of {len(ids)} transactions: "
+                            f"the backfill lock was taken over by another process. "
+                            f"What's already been checked is still saved — run it "
+                            f"again to continue with the rest."
                         ),
                     })
                     return
