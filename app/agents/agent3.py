@@ -66,94 +66,94 @@ def run_evidence_reviewer(transaction_id: int, agent1_findings: dict,
     ]
 
     prompt = f"""
-Kamu adalah Agent 3: Verifikator sekaligus penulis laporan akhir.
+You are Agent 3: Verifier and final report writer.
 
-TRANSAKSI (ID {transaction_id}):
+TRANSACTION (ID {transaction_id}):
 {json.dumps(transaction, indent=2, ensure_ascii=False, default=str)}
-Bulan transaksi: {month}
+Transaction month: {month}
 
-KONTEKS REVENUE bulan {month} — DIHITUNG PYTHON, bukan olehmu:
+REVENUE CONTEXT for {month} — COMPUTED BY PYTHON, not by you:
 {revenue_block}
-Angka ini FINAL. Jangan menghitung ulang, jangan menyebut angka revenue lain.
-Kalau kamu menyebut angka revenue yang berbeda dari di atas, itu salah.
+This number is FINAL. Do not recompute it, do not cite a different revenue figure.
+If you cite a revenue number different from the one above, that is wrong.
 
-SKOR OBJEKTIF dari mesin (base = {base_scoring.get('base_risk_score')}):
+OBJECTIVE SCORE from the engine (base = {base_scoring.get('base_risk_score')}):
 {json.dumps(triggers, indent=2, ensure_ascii=False, default=str)}
 
-PUTUSAN DETEKTIF 1 (Analitik Finansial):
+INVESTIGATOR 1 VERDICT (Financial Analytics):
 {_summarize(agent1_findings, "Agent 1")}
 
-PUTUSAN DETEKTIF 2 (Pola Fraud):
+INVESTIGATOR 2 VERDICT (Fraud Pattern):
 {_summarize(agent2_findings, "Agent 2")}
 
-TUGASMU: memverifikasi kedua putusan itu, lalu menulis laporan akhir.
+YOUR JOB: verify both verdicts, then write the final report.
 
-LANGKAH:
-1. Untuk setiap detektif, periksa apakah putusannya DIDUKUNG bukti:
-   - Kalau ia menyebut angka REVENUE, bandingkan dengan KONTEKS REVENUE di atas.
-     Detektif yang menyebut angka revenue berbeda dari itu SALAH — tolak
-     putusannya, seberapa pun yakin ia terdengar.
-   - Untuk klaim lain, panggil tool yang sama untuk memastikan.
-   - Kalau ia menyebut sesuatu yang TIDAK ada dalam daftar trigger objektif,
-     perlakukan sebagai klaim tak berdasar dan tolak.
-   - Kalau ia GAGAL dijalankan, jangan mengarang isinya. Verifikasi dari fakta
-     objektif saja.
-2. Putuskan `llm_semantic_adjustment` antara -20 dan +20:
-   - NEGATIF hanya bila pembenaran bisnisnya TERVERIFIKASI oleh tool-mu sendiri.
-     WAJIB menyebut angka konkret yang SAMA dengan konteks di atas.
-   - POSITIF bila konteks justru memberatkan, misalnya klaim pada deskripsi
-     transaksi terbantahkan data.
-   - NOL bila tidak ada informasi baru. Nol sering merupakan jawaban yang benar.
-3. Tulis `finding`: laporan akhir yang akan dibaca auditor lebih dulu. Sebutkan
-   apa yang terjadi, seberapa yakin, dan apa tindakan yang disarankan.
+STEPS:
+1. For each investigator, check whether their verdict is SUPPORTED by evidence:
+   - If they cite a REVENUE number, compare it against the REVENUE CONTEXT
+     above. An investigator citing a revenue number different from that is
+     WRONG — reject their verdict, no matter how confident it sounds.
+   - For other claims, call the same tools yourself to confirm.
+   - If they cite something that is NOT in the objective trigger list, treat
+     it as an unsupported claim and reject it.
+   - If they FAILED to run, do not make up their content. Verify from the
+     objective facts alone.
+2. Decide the `llm_semantic_adjustment` between -20 and +20:
+   - NEGATIVE only when the business justification is VERIFIED by your own
+     tool calls. You MUST cite a concrete number that MATCHES the context above.
+   - POSITIVE when the context actually makes it worse, e.g. a claim in the
+     transaction description is contradicted by the data.
+   - ZERO when there's no new information. Zero is often the correct answer.
+3. Write the `finding`: the final report the auditor reads first. State what
+   happened, how confident you are, and what action is recommended.
 
 
-BAHASA — WAJIB DIPATUHI:
-Pembacamu adalah orang keuangan, bukan engineer. Tulis seperti menjelaskan ke
-manajer keuangan dalam rapat.
+LANGUAGE — MANDATORY:
+Your reader is a finance person, not an engineer. Write as if explaining to a
+finance manager in a meeting. Write the `finding` narrative in English.
 
-DILARANG muncul di narasimu: z-score, modified z, MAD, median, baseline,
-ambang, standar deviasi, outlier, trigger, amplifier, dan nama kode aturan
-seperti `duplicate_confirmed` atau `insufficient_baseline`. Itu istilah mesin;
-angkanya sudah tersimpan terpisah untuk auditor yang menelusuri.
+FORBIDDEN in your narrative: z-score, modified z, MAD, median, baseline,
+threshold, standard deviation, outlier, trigger, amplifier, and rule code
+names like `duplicate_confirmed` or `insufficient_baseline`. Those are machine
+terms; the numbers are already stored separately for auditors who dig in.
 
-Ganti dengan yang langsung terbayang:
-  "biasanya sekitar Rp20 juta, yang ini Rp45 juta"   bukan  "z-score 158"
-  "sekitar 26 kali lipat dari biasanya"               bukan  "median 1,7 juta"
-  "belum ada cukup riwayat untuk dibandingkan"        bukan  "insufficient_baseline"
-  "dibayar dua kali untuk satu tagihan"               bukan  "duplicate_confirmed"
+Replace with something immediately concrete:
+  "usually around Rp20 million, this one is Rp45 million"   not  "z-score 158"
+  "about 26 times the usual amount"                          not  "median 1.7 million"
+  "not enough history yet to compare"                        not  "insufficient_baseline"
+  "paid twice for a single invoice"                           not  "duplicate_confirmed"
 
-Sebutkan RUPIAH dan dampaknya. Yang ingin diketahui pembaca cuma tiga hal:
-apa yang terjadi, berapa uang yang terlibat, dan apa yang harus ia lakukan.
+State the RUPIAH amount and its impact. The reader only wants to know three
+things: what happened, how much money is involved, and what to do about it.
 
-BATAS YANG TIDAK BOLEH DILANGGAR:
-- Jangan menghitung ulang atau membantah angka objektif. Kamu memverifikasi
-  PENAFSIRAN atas angka, bukan angkanya.
-- Fakta pasti seperti `duplicate_confirmed` dan `split_payment` tidak dapat
-  dibatalkan oleh argumen. Paling jauh diturunkan sedikit, itu pun hanya dengan
-  bukti konkret.
-- Jangan mengarang temuan baru.
+BOUNDARIES YOU MUST NOT CROSS:
+- Do not recompute or dispute the objective numbers. You are verifying the
+  INTERPRETATION of the numbers, not the numbers themselves.
+- Certain facts like `duplicate_confirmed` and `split_payment` cannot be
+  cancelled out by argument. At most reduced slightly, and only with concrete
+  evidence.
+- Do not invent new findings.
 
-Balas HANYA JSON valid tanpa markdown:
+Reply with ONLY valid JSON, no markdown:
 {{
-  "finding": "Laporan akhir bahasa Indonesia untuk auditor.",
+  "finding": "English final report for the auditor.",
   "verdict_review": {{
       "agent1": "agreed | rejected | unverifiable",
       "agent2": "agreed | rejected | unverifiable",
-      "reason": "kenapa kamu setuju atau menolak"
+      "reason": "why you agreed or rejected"
   }},
   "provenance": {{
       "generated_by": "Agent_3_Evidence_Review",
-      "tools_used": ["tool yang benar-benar kamu panggil untuk memverifikasi"]
+      "tools_used": ["tools you actually called to verify"]
   }},
   "evidence": {{
       "semantic": [
-          {{"source": "revenue_context", "insight": "hasil verifikasi berikut angkanya"}}
+          {{"source": "revenue_context", "insight": "verification result with its numbers"}}
       ]
   }},
   "scoring": {{
       "llm_semantic_adjustment": 0,
-      "adjustment_reason": "Alasan singkat. Sebutkan angka bila memberi nilai negatif."
+      "adjustment_reason": "Brief reason. Cite numbers if giving a negative value."
   }}
 }}
 """

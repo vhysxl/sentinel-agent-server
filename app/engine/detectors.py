@@ -105,9 +105,9 @@ def detect_amount_anomaly(db, txn) -> Optional[Trigger]:
         return Trigger(
             code="insufficient_baseline", points=0, owner=AGENT_1,
             narrative=(
-                f"Belum ada cukup riwayat untuk membandingkan nilai ini — hanya "
-                f"{n} transaksi sejenis yang tercatat sebelumnya. Artinya kewajaran "
-                f"nominalnya belum bisa dinilai, bukan berarti sudah aman."
+                f"Not enough history yet to compare this amount — only "
+                f"{n} similar transactions recorded so far. This means the "
+                f"amount can't be assessed yet, not that it's already fine."
             ),
             detail=result.to_dict(), amplifier_only=True,
         )
@@ -118,15 +118,15 @@ def detect_amount_anomaly(db, txn) -> Optional[Trigger]:
     z = result.computed_value
     points = _z_points(z) if z is not None else 20
     amount = float(txn.amount)
-    acuan = "vendor ini" if result.scope == "vendor" else f"kategori {txn.category}"
+    acuan = "this vendor" if result.scope == "vendor" else f"the {txn.category} category"
     lipat = kelipatan(amount, result.median) if result.median else ""
 
     return Trigger(
         code="z_score_anomaly", points=points, owner=AGENT_1,
         narrative=(
-            f"Nilai {rupiah(amount)} jauh di atas kebiasaan {acuan}, yang biasanya "
-            f"sekitar {ringkas(result.median)} per transaksi "
-            f"(dari {result.n_baseline} transaksi sebelumnya)"
+            f"The amount {rupiah(amount)} is far above what's usual for {acuan}, "
+            f"which is usually around {ringkas(result.median)} per transaction "
+            f"(from {result.n_baseline} prior transactions)"
             + (f" — {lipat}." if lipat else ".")
         ),
         detail=result.to_dict(),
@@ -154,12 +154,12 @@ def detect_timing(db, txn) -> Optional[Trigger]:
     return Trigger(
         code="timing_outside_hours", points=20, owner=AGENT_1, amplifier_only=True,
         narrative=(
-            f"Tercatat {tanggal(local)} WIB — di luar jam kerja "
-            f"(Senin-Jumat {WORK_START_HOUR:02d}:00-{WORK_END_HOUR - 1:02d}:59)."
+            f"Recorded {tanggal(local)} WIB — outside working hours "
+            f"(Mon-Fri {WORK_START_HOUR:02d}:00-{WORK_END_HOUR - 1:02d}:59)."
         ),
         detail={
             "evaluated_field": "created_at",
-            "reason": "waktu pencatatan ditulis server, tidak dapat diubah dari form",
+            "reason": "recording time is written by the server, cannot be edited via the form",
             "recorded_at_wib": local.strftime("%Y-%m-%d %H:%M:%S"),
             "time_wib": local.strftime("%H:%M:%S"),
             "weekday": local.strftime("%A"),
@@ -206,10 +206,10 @@ def detect_duplicate(db, txn) -> Optional[Trigger]:
             return Trigger(
                 code="duplicate_confirmed", points=50, owner=AGENT_2,
                 narrative=(
-                    f"Faktur {txn.invoice_no} dibayar {len(rows)} kali ke vendor yang "
-                    f"sama. Total yang keluar {rupiah(total)} untuk satu tagihan, "
-                    f"sehingga ada {rupiah(total - float(txn.amount))} berpotensi "
-                    f"kelebihan bayar. Pembayaran pada {', '.join(r[2] for r in rows)} WIB."
+                    f"Invoice {txn.invoice_no} was paid {len(rows)} times to the same "
+                    f"vendor. Total paid out is {rupiah(total)} for a single invoice, "
+                    f"meaning {rupiah(total - float(txn.amount))} is a potential "
+                    f"overpayment. Payments on {', '.join(r[2] for r in rows)} WIB."
                 ),
                 detail={
                     "rule": "same_invoice_no",
@@ -239,16 +239,16 @@ def detect_duplicate(db, txn) -> Optional[Trigger]:
         return Trigger(
             code="duplicate_suspected", points=30, owner=AGENT_2,
             narrative=(
-                f"Indikasi pembayaran ganda: {len(rows)} transaksi bernominal sama "
-                f"({rupiah(txn.amount)}) ke vendor yang sama dalam 24 jam, pada "
-                f"{', '.join(r[1] for r in rows)} WIB. Nomor fakturnya tidak diisi, "
-                f"jadi ini baru dugaan — perlu dicek ke bukti tagihannya."
+                f"Indication of a duplicate payment: {len(rows)} transactions with the "
+                f"same amount ({rupiah(txn.amount)}) to the same vendor within 24 "
+                f"hours, on {', '.join(r[1] for r in rows)} WIB. The invoice number "
+                f"is empty, so this is only a suspicion — check against the invoice."
             ),
             detail={
                 "rule": "same_vendor_amount_24h",
                 "match_count": len(rows),
                 "transaction_ids": [r[0] for r in rows],
-                "note": "invoice_no kosong; keyakinan sedang",
+                "note": "invoice_no empty; medium confidence",
             },
         )
     return None
@@ -300,12 +300,11 @@ def detect_split_payment(db, txn) -> Optional[Trigger]:
     return Trigger(
         code="split_payment", points=50, owner=AGENT_2,
         narrative=(
-            f"{len(rows)} pembayaran masing-masing {rupiah(amount)} ke vendor yang "
-            f"sama dalam {SPLIT_WINDOW_DAYS} hari, total {rupiah(total)}. Setiap "
-            f"pembayaran berhenti tepat di bawah angka bulat {rupiah(APPROVAL_THRESHOLD)} "
-            f"— pola yang lazim dipakai untuk membuat satu pengeluaran besar "
-            f"terlihat sebagai beberapa pengeluaran kecil, padahal totalnya jauh "
-            f"melewati angka itu."
+            f"{len(rows)} payments of {rupiah(amount)} each to the same vendor "
+            f"within {SPLIT_WINDOW_DAYS} days, totaling {rupiah(total)}. Each "
+            f"payment stops just under the round number {rupiah(APPROVAL_THRESHOLD)} "
+            f"— a pattern commonly used to make one large expense look like "
+            f"several small ones, when the total is well past that figure."
         ),
         detail={
             "rule": "below_round_number_threshold",
@@ -365,11 +364,11 @@ def detect_smurfing(db, txn) -> Optional[Trigger]:
     return Trigger(
         code="smurfing_pattern", points=40, owner=AGENT_2,
         narrative=(
-            f"{len(rows)} pembayaran dengan nominal identik ({rupiah(amount)}) ke "
-            f"vendor yang sama dalam {SMURF_WINDOW_DAYS} hari, pada "
-            f"{', '.join(r[1] for r in rows)} WIB. Total {rupiah(total)}. Frekuensi "
-            f"pembayaran identik seperti ini tidak lazim untuk satu vendor — "
-            f"indikasi satu pengeluaran besar yang sengaja dipecah rata."
+            f"{len(rows)} payments of an identical amount ({rupiah(amount)}) to the "
+            f"same vendor within {SMURF_WINDOW_DAYS} days, on "
+            f"{', '.join(r[1] for r in rows)} WIB. Total {rupiah(total)}. This "
+            f"frequency of identical payments is unusual for a single vendor — "
+            f"an indication of one large expense deliberately split evenly."
         ),
         detail={
             "rule": "repeated_identical_amount",
@@ -432,9 +431,9 @@ def detect_vendor_backdated(db, txn) -> Optional[Trigger]:
         code="vendor_registered_after_payment", points=20, owner=AGENT_2,
         amplifier_only=True,
         narrative=(
-            f"Pembayaran ke {name} tercatat {gap} hari SEBELUM vendor ini "
-            f"terdaftar di data master. Uang keluar lebih dulu, catatan "
-            f"vendornya menyusul."
+            f"Payment to {name} was recorded {gap} days BEFORE this vendor "
+            f"was registered in the master data. The money went out first, "
+            f"the vendor record followed."
         ),
         detail={
             "rule": "payment_precedes_vendor_registration",
@@ -443,9 +442,9 @@ def detect_vendor_backdated(db, txn) -> Optional[Trigger]:
             "vendor_joined_wib": joined.strftime("%Y-%m-%d"),
             "payment_recorded_wib": paid.strftime("%Y-%m-%d"),
             "gap_days": gap,
-            "note": ("migrasi data dapat menghasilkan pola ini pada seluruh "
-                     "vendor sekaligus; karena itu tidak pernah menjadi pemicu "
-                     "sendirian"),
+            "note": ("a data migration can produce this pattern across all "
+                     "vendors at once; that's why it never triggers a "
+                     "candidate on its own"),
         },
     )
 
@@ -481,8 +480,8 @@ def detect_vendor_risk(db, txn) -> Optional[Trigger]:
     if status in RISKY_VENDOR_STATUSES:
         return Trigger(
             code="vendor_flagged", points=30, owner=AGENT_2,
-            narrative=(f"Vendor {name} berstatus nonaktif di data master, "
-                       f"tapi transaksi ini tetap dibayarkan ke sana."),
+            narrative=(f"Vendor {name} is marked inactive in the master data, "
+                       f"but this transaction was still paid out to them."),
             detail={"vendor_id": txn.vendor_id, "vendor_name": name,
                     "vendor_status": status, "total_transactions": total},
         )
@@ -491,8 +490,8 @@ def detect_vendor_risk(db, txn) -> Optional[Trigger]:
         return Trigger(
             code="vendor_new", points=20, owner=AGENT_2,
             narrative=(
-                f"Vendor {name} baru {total} kali bertransaksi, jadi belum punya "
-                f"rekam jejak yang bisa dijadikan pegangan."
+                f"Vendor {name} has only transacted {total} times so far, so "
+                f"there isn't enough track record to rely on yet."
             ),
             detail={"vendor_id": txn.vendor_id, "vendor_name": name,
                     "vendor_status": status, "total_transactions": total},

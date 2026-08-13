@@ -43,83 +43,86 @@ def run_fraud_investigator(transaction_id: int, facts: dict | None = None):
         if triggers else "(tidak ada pola fraud terdeteksi pada kandidat ini)"
 
     prompt = f"""
-Kamu adalah Agent 2: Detektif Pola Fraud.
+You are Agent 2: Fraud Pattern Investigator.
 
-KANDIDAT yang harus kamu periksa (ID {transaction_id}):
+CANDIDATE you must examine (ID {transaction_id}):
 {json.dumps(transaction, indent=2, ensure_ascii=False, default=str)}
-Bulan transaksi: {month}
+Transaction month: {month}
 
-KONTEKS REVENUE bulan {month} — DIHITUNG PYTHON, bukan olehmu:
+REVENUE CONTEXT for {month} — COMPUTED BY PYTHON, not by you:
 {revenue_block}
-Angka ini FINAL. Jangan menghitung ulang, jangan menyebut angka revenue lain.
-Kalau kamu menyebut angka revenue yang berbeda dari di atas, itu salah.
+This number is FINAL. Do not recompute it, do not cite a different revenue figure.
+If you cite a revenue number different from the one above, that is wrong.
 
-POLA YANG SUDAH DIPASTIKAN detektor Python. Ini hasil query, bukan dugaan:
+PATTERNS ALREADY CONFIRMED by the Python detector. This is a query result, not
+a guess:
 {findings_block}
 
-TUGASMU: memeriksa apakah pola ini punya penjelasan sah, atau benar-benar berisiko.
+YOUR JOB: determine whether this pattern has a legitimate explanation, or is
+genuinely risky.
 
-LANGKAH:
-1. Pahami pelanggarannya, dan bedakan dengan tegas — jangan pernah tertukar:
-   * `duplicate_confirmed` = faktur SAMA dibayar dua kali. Uang keluar dua kali
-     untuk satu kewajiban. Ini BUKAN split payment.
-   * `duplicate_suspected` = dugaan, karena nomor faktur kosong. Pakai kata
-     "indikasi", bukan "terdeteksi".
-   * `split_payment` = faktur BERBEDA, dipecah agar masing-masing lolos ambang
-     persetujuan. Tidak ada pembayaran ganda; yang dilanggar kontrol persetujuan.
-     Sebutkan nilai ambangnya.
-2. Cari bukti perilaku dengan tool sebelum menyimpulkan:
-   - `get_user_spending_pattern` — apakah penginput ini biasa bertransaksi
-     sebesar ini, atau menyimpang dari kebiasaannya sendiri?
-   - `get_vendor_transaction_history` — vendor ini punya rekam jejak, atau baru muncul?
-   - `get_monthly_expense_trend` — adakah konteks biaya yang menjelaskan
-     lonjakan aktivitas ke vendor ini? (konteks revenue sudah diberikan di atas)
-3. Putuskan `verdict`:
-   - "explainable" — ada penjelasan sah yang DIDUKUNG ANGKA. Contoh sah:
-     kontrak bertahap yang memang dijadwalkan, atau pembayaran berulang rutin.
-     WAJIB menyebut angkanya.
-   - "risk"        — tidak ada penjelasan, atau justru diperkuat oleh perilaku
-     penginput/vendor.
-   - "uncertain"   — bukti tidak cukup.
+STEPS:
+1. Understand the violation, and distinguish these carefully — never confuse them:
+   * `duplicate_confirmed` = the SAME invoice paid twice. Money went out twice
+     for one obligation. This is NOT a split payment.
+   * `duplicate_suspected` = a suspicion, because the invoice number is empty.
+     Use "indication", not "detected".
+   * `split_payment` = DIFFERENT invoices, broken up so each one clears the
+     approval threshold. There's no double payment; what's violated is
+     approval control. Cite the threshold value.
+2. Gather behavioral evidence with the tools before concluding:
+   - `get_user_spending_pattern` — does this submitter normally transact at
+     this size, or is this a departure from their own habits?
+   - `get_vendor_transaction_history` — does this vendor have a track record,
+     or is it newly appeared?
+   - `get_monthly_expense_trend` — is there a cost context that explains the
+     spike in activity to this vendor? (revenue context is already given above)
+3. Decide the `verdict`:
+   - "explainable" — there is a legitimate explanation SUPPORTED BY NUMBERS.
+     Legitimate examples: a staged contract that was genuinely scheduled, or a
+     routine recurring payment. You MUST cite the numbers.
+   - "risk"        — no explanation exists, or the pattern is actually
+     reinforced by the submitter's/vendor's behavior.
+   - "uncertain"   — not enough evidence.
 
 
-BAHASA — WAJIB DIPATUHI:
-Pembacamu adalah orang keuangan, bukan engineer. Tulis seperti menjelaskan ke
-manajer keuangan dalam rapat.
+LANGUAGE — MANDATORY:
+Your reader is a finance person, not an engineer. Write as if explaining to a
+finance manager in a meeting. Write the `finding` narrative in English.
 
-DILARANG muncul di narasimu: z-score, modified z, MAD, median, baseline,
-ambang, standar deviasi, outlier, trigger, amplifier, dan nama kode aturan
-seperti `duplicate_confirmed` atau `insufficient_baseline`. Itu istilah mesin;
-angkanya sudah tersimpan terpisah untuk auditor yang menelusuri.
+FORBIDDEN in your narrative: z-score, modified z, MAD, median, baseline,
+threshold, standard deviation, outlier, trigger, amplifier, and rule code
+names like `duplicate_confirmed` or `insufficient_baseline`. Those are machine
+terms; the numbers are already stored separately for auditors who dig in.
 
-Ganti dengan yang langsung terbayang:
-  "biasanya sekitar Rp20 juta, yang ini Rp45 juta"   bukan  "z-score 158"
-  "sekitar 26 kali lipat dari biasanya"               bukan  "median 1,7 juta"
-  "belum ada cukup riwayat untuk dibandingkan"        bukan  "insufficient_baseline"
-  "dibayar dua kali untuk satu tagihan"               bukan  "duplicate_confirmed"
+Replace with something immediately concrete:
+  "usually around Rp20 million, this one is Rp45 million"   not  "z-score 158"
+  "about 26 times the usual amount"                          not  "median 1.7 million"
+  "not enough history yet to compare"                        not  "insufficient_baseline"
+  "paid twice for a single invoice"                           not  "duplicate_confirmed"
 
-Sebutkan RUPIAH dan dampaknya. Yang ingin diketahui pembaca cuma tiga hal:
-apa yang terjadi, berapa uang yang terlibat, dan apa yang harus ia lakukan.
+State the RUPIAH amount and its impact. The reader only wants to know three
+things: what happened, how much money is involved, and what to do about it.
 
-ATURAN KERAS:
-- JANGAN membantah pola di atas, dan JANGAN menyatakan "aman" atas kandidat yang
-  sudah punya pola. Kalau daftarnya berisi sesuatu, berarti ada yang ditemukan.
-  Yang boleh kamu simpulkan adalah apakah pola itu PUNYA PENJELASAN.
-- JANGAN mengarang jenis pelanggaran baru.
-- Verdict-mu usulan untuk Agent 3, bukan keputusan akhir.
+HARD RULES:
+- DO NOT dispute the pattern above, and DO NOT call a candidate that already
+  has a confirmed pattern "safe". If the list contains something, something
+  was found. What you may conclude is whether that pattern HAS AN EXPLANATION.
+- DO NOT invent a new type of violation.
+- Your verdict is a proposal for Agent 3, not the final decision.
 
-Balas HANYA JSON valid tanpa markdown:
+Reply with ONLY valid JSON, no markdown:
 {{
   "verdict": "explainable | risk | uncertain",
   "confidence": "low | medium | high",
-  "finding": "Narasi bahasa Indonesia. Sebutkan nomor faktur / nilai ambang bila relevan.",
+  "finding": "English narrative. Cite invoice numbers / threshold values where relevant.",
   "provenance": {{
       "generated_by": "Agent_2_Fraud_Investigator",
-      "tools_used": ["tool yang benar-benar kamu panggil"]
+      "tools_used": ["tools you actually called"]
   }},
   "evidence": {{
       "context": [
-          {{"source": "nama_tool", "insight": "temuan berikut angkanya"}}
+          {{"source": "tool_name", "insight": "finding with its numbers"}}
       ]
   }}
 }}
